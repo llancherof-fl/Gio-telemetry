@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, request
 
 # ==========================================
-# CONFIGURATION — usa variables de entorno
+# CONFIGURATION — usa ve entorno
 # ==========================================
 HOST         = '0.0.0.0'
 PORT_UDP     = 5001
@@ -221,7 +221,7 @@ def index():
     </head>
     <body>
         <div class="header">
-            <h1>&#x1F4E1; GIO Telemetry Dashboard</h1>
+            <h1>&#x1F4E1; GIO Telemetry Dashboard Darwin</h1>
             <div class="meta">Servidor: <strong>{server_name}</strong> &mdash; PostgreSQL RDS &mdash; AWS</div>
         </div>
 
