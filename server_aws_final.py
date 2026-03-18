@@ -5,12 +5,17 @@ import psycopg2.extras
 import threading
 import datetime
 import os
+import ssl
 from flask import Flask, jsonify, request
 
 HOST         = '0.0.0.0'
 PORT_UDP     = 5001
 PORT_WEB     = 8080
+PORT_HTTPS   = 443
 HISTORY_LIMIT = 50
+
+CERT_FILE = '/etc/letsencrypt/live/giocamila.hopto.org/fullchain.pem'
+KEY_FILE  = '/etc/letsencrypt/live/giocamila.hopto.org/privkey.pem'
 
 DB_CONFIG = {
     'host':     os.environ.get('DB_HOST',     'localhost'),
@@ -372,8 +377,18 @@ if __name__ == '__main__':
 
     threading.Thread(target=udp_sniffer, daemon=True).start()
     ec2_name = os.environ.get('EC2_NAME', 'servidor')
-    print(f"[*] Servidor '{ec2_name}' corriendo en puerto {PORT_WEB}")
-    print(f"[*] Dashboard: http://0.0.0.0:{PORT_WEB}")
-    print(f"[*] Health:    http://0.0.0.0:{PORT_WEB}/health")
-    print(f"[*] Test DB:   http://0.0.0.0:{PORT_WEB}/test_db")
-    app.run(host='0.0.0.0', port=PORT_WEB, debug=False, use_reloader=False)
+    print(f"[*] Servidor '{ec2_name}' corriendo en puerto {PORT_HTTPS} (HTTPS)")
+    print(f"[*] Dashboard: https://giocamila.hopto.org")
+    print(f"[*] Health:    https://giocamila.hopto.org/health")
+    print(f"[*] Test DB:   https://giocamila.hopto.org/test_db")
+
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain(CERT_FILE, KEY_FILE)
+
+    app.run(
+        host='0.0.0.0',
+        port=PORT_HTTPS,
+        debug=False,
+        use_reloader=False,
+        ssl_context=ssl_context
+    )
