@@ -221,7 +221,7 @@ def index():
     </head>
     <body>
         <div class="header">
-            <h1>&#x1F4E1; GIO Telemetry Dashboard HPTA MATENME ODIO DISENO</h1>
+            <h1>&#x1F4E1; GIO Telemetry Dashboard ME QUEIRORO DIRMIR</h1>
             <div class="meta">Servidor: <strong>{server_name}</strong> &mdash; PostgreSQL RDS &mdash; AWS</div>
         </div>
 
