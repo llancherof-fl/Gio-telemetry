@@ -7,15 +7,11 @@ import datetime
 import os
 from flask import Flask, jsonify, request
 
-# ==========================================
-# CONFIGURATION — usa ve entorno
-# ==========================================
 HOST         = '0.0.0.0'
 PORT_UDP     = 5001
 PORT_WEB     = 8080
 HISTORY_LIMIT = 50
 
-# ── PostgreSQL (AWS RDS) ──
 DB_CONFIG = {
     'host':     os.environ.get('DB_HOST',     'localhost'),
     'user':     os.environ.get('DB_USER',     'postgres'),
@@ -27,9 +23,6 @@ DB_CONFIG = {
 
 app = Flask(__name__)
 
-# ==========================================
-# DATABASE LOGIC (PostgreSQL)
-# ==========================================
 def get_db():
     conn = psycopg2.connect(**DB_CONFIG)
     return conn
@@ -88,10 +81,6 @@ def fetch_history(limit=HISTORY_LIMIT):
         r['timestamp'] = str(r['timestamp'])
     return rows
 
-# ==========================================
-# API ENDPOINTS
-# ==========================================
-
 @app.route('/health')
 def health():
     return jsonify({
@@ -113,7 +102,7 @@ def test_db():
             'db_time':     str(db_time),
             'db_host':     DB_CONFIG['host'],
             'db_name':     DB_CONFIG['dbname'],
-            'message':     'Conexión a RDS PostgreSQL exitosa ✓'
+            'message':     'Conexion a RDS PostgreSQL exitosa'
         })
     except Exception as e:
         return jsonify({
@@ -127,7 +116,7 @@ def api_latest():
     result = fetch_latest()
     if result:
         return jsonify(result)
-    return jsonify({'error': 'Sin datos aún'})
+    return jsonify({'error': 'Sin datos aun'})
 
 @app.route('/api/history')
 def api_history():
@@ -150,9 +139,6 @@ def api_stats():
         'last_record':   str(row['last_ts'])  if row['last_ts']  else None
     })
 
-# ==========================================
-# WEB DASHBOARD con Mapa Leaflet
-# ==========================================
 @app.route('/')
 def index():
     server_name = os.environ.get('EC2_NAME', 'GIO Server')
@@ -162,66 +148,68 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{server_name} - AWS Dashboard</title>
+        <title>{server_name} - GIO Dashboard</title>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{
                 font-family: 'Courier New', Courier, monospace;
-                background-color: #0d1117; color: #c9d1d9; padding: 20px 30px;
+                background-color: #0e0b14;
+                color: #d9c9e8;
+                padding: 20px 30px;
             }}
-            .header {{ border-bottom: 1px solid #30363d; padding-bottom: 14px; margin-bottom: 20px; }}
-            .header h1 {{ color: #58a6ff; font-size: 1.4rem; margin-bottom: 5px; }}
-            .header .meta {{ color: #8b949e; font-size: 0.82rem; }}
+            .header {{ border-bottom: 1px solid #3b2d52; padding-bottom: 14px; margin-bottom: 20px; }}
+            .header h1 {{ color: #c084c8; font-size: 1.4rem; margin-bottom: 5px; }}
+            .header .meta {{ color: #8b7a9e; font-size: 0.82rem; }}
             .status-bar {{ display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }}
             .status-item {{
-                background: #161b22; border: 1px solid #30363d;
+                background: #1a1225; border: 1px solid #3b2d52;
                 border-radius: 6px; padding: 10px 16px; font-size: 0.82rem;
             }}
-            .status-item .label {{ color: #8b949e; }}
-            .status-item .value {{ color: #7ee787; font-weight: bold; }}
-            .status-item .value.warning {{ color: #d29922; }}
+            .status-item .label {{ color: #8b7a9e; }}
+            .status-item .value {{ color: #e89bcf; font-weight: bold; }}
+            .status-item .value.warning {{ color: #c9a0dc; }}
             .main-grid {{
                 display: grid; grid-template-columns: 1fr 1fr;
                 grid-template-rows: 420px auto; gap: 18px; margin-bottom: 20px;
             }}
             @media (max-width: 900px) {{ .main-grid {{ grid-template-columns: 1fr; }} }}
             .card {{
-                border: 1px solid #30363d; background: #161b22;
+                border: 1px solid #3b2d52; background: #1a1225;
                 padding: 16px; border-radius: 6px; overflow: hidden;
             }}
-            .card h2 {{ color: #58a6ff; font-size: 0.95rem; margin-bottom: 12px; }}
+            .card h2 {{ color: #c084c8; font-size: 0.95rem; margin-bottom: 12px; }}
             .badge {{
                 display: inline-block; padding: 2px 7px; border-radius: 4px;
                 font-weight: bold; font-size: 0.7rem; margin-right: 6px;
             }}
-            .badge-udp  {{ background: #238636; color: white; }}
-            .badge-live {{ background: #d29922; color: white; animation: pulse 2s infinite; }}
-            .badge-map  {{ background: #1f6feb; color: white; }}
+            .badge-udp  {{ background: #6b2d6b; color: #f0c0f0; }}
+            .badge-live {{ background: #7a2d5a; color: #f0c0d8; animation: pulse 2s infinite; }}
+            .badge-map  {{ background: #4a2070; color: #d4a8f0; }}
             @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.5}} }}
-            #map {{ width: 100%; height: 340px; border-radius: 4px; border: 1px solid #30363d; }}
+            #map {{ width: 100%; height: 340px; border-radius: 4px; border: 1px solid #3b2d52; }}
             .rt-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
-            .rt-field .label {{ color: #8b949e; font-size: 0.78rem; margin-bottom: 2px; }}
-            .rt-field .value {{ color: #7ee787; font-size: 1rem; font-weight: bold; }}
-            .table-wrap {{ height: 340px; overflow-y: auto; border: 1px solid #30363d; border-radius: 4px; }}
+            .rt-field .label {{ color: #8b7a9e; font-size: 0.78rem; margin-bottom: 2px; }}
+            .rt-field .value {{ color: #e89bcf; font-size: 1rem; font-weight: bold; }}
+            .table-wrap {{ height: 340px; overflow-y: auto; border: 1px solid #3b2d52; border-radius: 4px; }}
             table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; }}
             thead th {{
-                background: #21262d; color: #58a6ff; padding: 7px 9px;
+                background: #251835; color: #c084c8; padding: 7px 9px;
                 text-align: left; position: sticky; top: 0;
-                border-bottom: 1px solid #30363d;
+                border-bottom: 1px solid #3b2d52;
             }}
-            tbody tr {{ border-bottom: 1px solid #1c2128; }}
-            tbody tr:hover {{ background: #1c2128; }}
-            td {{ padding: 6px 9px; color: #c9d1d9; }}
-            td.coord {{ color: #79c0ff; }}
-            .no-data {{ color: #8b949e; text-align: center; padding: 20px; }}
-            .footer {{ color: #8b949e; font-size: 0.75rem; text-align: center; margin-top: 10px; }}
+            tbody tr {{ border-bottom: 1px solid #1e1428; }}
+            tbody tr:hover {{ background: #1e1428; }}
+            td {{ padding: 6px 9px; color: #d9c9e8; }}
+            td.coord {{ color: #d4a8f0; }}
+            .no-data {{ color: #8b7a9e; text-align: center; padding: 20px; }}
+            .footer {{ color: #8b7a9e; font-size: 0.75rem; text-align: center; margin-top: 10px; }}
         </style>
     </head>
     <body>
         <div class="header">
-            <h1>&#x1F4E1; GIO Telemetry Dashboard ME QUEIRORO DIRMIR</h1>
+            <h1>&#x1F4E1; GIO Telemetry Dashboard</h1>
             <div class="meta">Servidor: <strong>{server_name}</strong> &mdash; PostgreSQL RDS &mdash; AWS</div>
         </div>
 
@@ -235,18 +223,18 @@ def index():
                 <span class="value warning" id="stat-first">...</span>
             </div>
             <div class="status-item">
-                <span class="label">Último registro: </span>
+                <span class="label">Ultimo registro: </span>
                 <span class="value" id="stat-last">...</span>
             </div>
         </div>
 
         <div class="main-grid">
             <div class="card">
-                <h2><span class="badge badge-map">&#x1F5FA; MAPA</span>Geo-localización en Tiempo Real</h2>
+                <h2><span class="badge badge-map">&#x1F5FA; MAPA</span>Geo-localizacion en Tiempo Real</h2>
                 <div id="map"></div>
             </div>
             <div class="card" style="grid-row: span 2;">
-                <h2><span class="badge badge-udp">UDP</span>Historial de Posiciones (últimos 50)</h2>
+                <h2><span class="badge badge-udp">UDP</span>Historial de Posiciones (ultimos 50)</h2>
                 <div class="table-wrap">
                     <table>
                         <thead>
@@ -259,9 +247,9 @@ def index():
                 </div>
             </div>
             <div class="card">
-                <h2><span class="badge badge-live">&#x25CF; LIVE</span>Última Posición Recibida</h2>
+                <h2><span class="badge badge-live">&#x25CF; LIVE</span>Ultima Posicion Recibida</h2>
                 <div id="realtime-container">
-                    <p class="no-data">Esperando telemetría UDP...</p>
+                    <p class="no-data">Esperando telemetria UDP...</p>
                 </div>
             </div>
         </div>
@@ -273,7 +261,13 @@ def index():
             L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
                 attribution: '© OpenStreetMap contributors'
             }}).addTo(map);
-            var vehicleIcon = L.divIcon({{ html: '&#x1F697;', iconSize: [30,30], className: 'vehicle-icon' }});
+
+            var vehicleIcon = L.divIcon({{
+                html: '<span style="font-size:26px;filter:hue-rotate(300deg) saturate(4) brightness(1.3)">&#x1F697;</span>',
+                iconSize: [30, 30],
+                className: ''
+            }});
+
             var marker = null;
             var routeLine = null;
             var firstPosition = true;
@@ -300,7 +294,7 @@ def index():
                 fetch('/api/history?limit=50').then(r => r.json()).then(data => {{
                     const tbody = document.getElementById('history-body');
                     if (!data || data.length === 0) {{
-                        tbody.innerHTML = '<tr><td colspan="5" class="no-data">Sin registros aún</td></tr>'; return;
+                        tbody.innerHTML = '<tr><td colspan="5" class="no-data">Sin registros aun</td></tr>'; return;
                     }}
                     tbody.innerHTML = data.map((row, i) => `
                         <tr>
@@ -309,17 +303,23 @@ def index():
                             <td>${{row.device}}</td>
                         </tr>`).join('');
 
-                    // Trazar la línea del recorrido en el mapa
-                    var coords = data.slice().reverse().map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
-                    if (routeLine) {{
-                        routeLine.setLatLngs(coords);
-                    }} else {{
-                        routeLine = L.polyline(coords, {{
-                            color: '#58a6ff',
-                            weight: 3,
-                            opacity: 0.8,
-                            smoothFactor: 1
-                        }}).addTo(map);
+                    var points = data.slice().reverse().map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
+                    if (points.length >= 2) {{
+                        var coords = points.map(p => p[1] + ',' + p[0]).join(';');
+                        fetch('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson')
+                            .then(r => r.json())
+                            .then(osrm => {{
+                                if (osrm.code !== 'Ok') return;
+                                var routeCoords = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                                if (routeLine) {{ map.removeLayer(routeLine); }}
+                                routeLine = L.polyline(routeCoords, {{
+                                    color: '#e879a0',
+                                    weight: 4,
+                                    opacity: 0.85,
+                                    smoothFactor: 1
+                                }}).addTo(map);
+                            }})
+                            .catch(err => console.error('OSRM error:', err));
                     }}
                 }});
             }}
@@ -341,9 +341,6 @@ def index():
     """
     return html
 
-# ==========================================
-# UDP SNIFFER
-# ==========================================
 def udp_sniffer():
     print(f"[*] Iniciando Sniffer UDP en puerto {PORT_UDP}...")
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -357,18 +354,15 @@ def udp_sniffer():
                     lon    = payload.get('long', 0.0)
                     device = payload.get('device', 'Desconocido')
                     raw_ts = payload.get('timestamp', 0)
-                    print(f"[UDP] {addr[0]}: Lat {lat}, Lon {lon} → PostgreSQL RDS")
+                    print(f"[UDP] {addr[0]}: Lat {lat}, Lon {lon} -> PostgreSQL RDS")
                     insert_data(lat, lon, device, raw_ts)
                 except json.JSONDecodeError:
                     pass
             except Exception:
                 pass
 
-# ==========================================
-# MAIN
-# ==========================================
 if __name__ == '__main__':
-    print("[*] Verificando conexión a base de datos...")
+    print("[*] Verificando conexion a base de datos...")
     try:
         init_db()
     except Exception as e:
