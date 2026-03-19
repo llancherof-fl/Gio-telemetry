@@ -30,7 +30,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_KEY_COMPANERA2 }}
           script: |
-            bash ~/start.sh
+            bash ~/Gio-telemetry/start.sh
 
   deploy-companera3:
     name: Deploy → gio-web-server (50.19.23.123)
