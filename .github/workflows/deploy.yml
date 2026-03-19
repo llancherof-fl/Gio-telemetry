@@ -1,0 +1,59 @@
+name: Deploy GIO Telemetry to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-camila:
+    name: Deploy → gio-web-camila (34.199.249.81)
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH y deploy en EC2 Camila
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST_CAMILA }}
+          username: ec2-user
+          key: ${{ secrets.EC2_KEY_CAMILA }}
+          script: |
+            bash ~/Gio-telemetry/start.sh
+
+  deploy-companera2:
+    name: Deploy → web-server-2 (54.84.31.103)
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH y deploy en EC2 Companera 2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST_COMPANERA2 }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY_COMPANERA2 }}
+          script: |
+            bash ~/Gio-telemetry/start.sh
+
+  deploy-companera3:
+    name: Deploy → gio-web-server (50.19.23.123)
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH y deploy en EC2 Companera 3
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST_COMPANERA3 }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY_COMPANERA3 }}
+          script: |
+            bash ~/Gio-telemetry/start.sh
+
+  deploy-sebastian:
+    name: Deploy → GIO-WEB-SEBASTIAN (44.195.251.222)
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH y deploy en EC2 Sebastian
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST_SEBASTIAN }}
+          username: ec2-user
+          key: ${{ secrets.EC2_KEY_SEBASTIAN }}
+          script: |
+            bash ~/Gio-telemetry/start.sh
