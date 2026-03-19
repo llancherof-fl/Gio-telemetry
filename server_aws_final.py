@@ -9,7 +9,7 @@ import ssl
 from flask import Flask, jsonify, request
 
 # ==========================================
-# CONFIGURATION — hola esta es una prueba  :)
+# CONFIGURATION — prueba 2
 # ==========================================
 HOST          = '0.0.0.0'
 PORT_UDP      = int(os.environ.get('PORT_UDP',  5001))
