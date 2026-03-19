@@ -91,6 +91,21 @@ def fetch_history(limit=HISTORY_LIMIT):
         r['timestamp'] = str(r['timestamp'])
     return rows
 
+def fetch_history_hours(hours=16):
+    conn = get_db()
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute(
+        """SELECT timestamp, lat, lon, device FROM coordinates
+           WHERE timestamp >= NOW() - INTERVAL '%s hours'
+           ORDER BY id DESC""",
+        (hours,)
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    for r in rows:
+        r['timestamp'] = str(r['timestamp'])
+    return rows
+
 @app.route('/health')
 def health():
     return jsonify({
@@ -131,6 +146,11 @@ def api_history():
     limit = request.args.get('limit', HISTORY_LIMIT, type=int)
     limit = min(limit, 500)
     return jsonify(fetch_history(limit))
+
+@app.route('/api/history/hours')
+def api_history_hours():
+    hours = request.args.get('hours', 16, type=int)
+    return jsonify(fetch_history_hours(hours))
 
 @app.route('/api/stats')
 def api_stats():
@@ -228,6 +248,7 @@ def index():
             L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{attribution: '© OpenStreetMap contributors'}}).addTo(map);
             var vehicleIcon = L.divIcon({{html: '<span style="font-size:26px;filter:hue-rotate(300deg) saturate(4) brightness(1.3)">&#x1F697;</span>', iconSize: [30, 30], className: ''}});
             var marker = null, routeLine = null, firstPosition = true;
+
             function fetchLatest() {{
                 fetch('/api/latest').then(r => r.json()).then(data => {{
                     if (data.error) return;
@@ -238,24 +259,35 @@ def index():
                     document.getElementById('realtime-container').innerHTML = `<div class="rt-grid"><div class="rt-field"><div class="label">Timestamp</div><div class="value">${{data.timestamp}}</div></div><div class="rt-field"><div class="label">Dispositivo</div><div class="value">${{data.device}}</div></div><div class="rt-field"><div class="label">Latitud</div><div class="value">${{data.lat}}</div></div><div class="rt-field"><div class="label">Longitud</div><div class="value">${{data.lon}}</div></div></div>`;
                 }}).catch(err => console.error(err));
             }}
+
             function fetchHistory() {{
+                // Tabla: ultimos 50 registros
                 fetch('/api/history?limit=50').then(r => r.json()).then(data => {{
                     const tbody = document.getElementById('history-body');
-                    if (!data || data.length === 0) {{ tbody.innerHTML = '<tr><td colspan="5" class="no-data">Sin registros aun</td></tr>'; return; }}
-                    tbody.innerHTML = data.map((row, i) => `<tr><td>${{i+1}}</td><td>${{row.timestamp}}</td><td class="coord">${{row.lat}}</td><td class="coord">${{row.lon}}</td><td>${{row.device}}</td></tr>`).join('');
-                    var points = data.slice().reverse().map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
-                    if (points.length >= 2) {{
-                        var coords = points.map(p => p[1] + ',' + p[0]).join(';');
-                        fetch('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson')
-                            .then(r => r.json()).then(osrm => {{
-                                if (osrm.code !== 'Ok') return;
-                                var routeCoords = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-                                if (routeLine) {{ map.removeLayer(routeLine); }}
-                                routeLine = L.polyline(routeCoords, {{color: '#e879a0', weight: 4, opacity: 0.85, smoothFactor: 1}}).addTo(map);
-                            }}).catch(err => console.error('OSRM error:', err));
+                    if (!data || data.length === 0) {{
+                        tbody.innerHTML = '<tr><td colspan="5" class="no-data">Sin registros aun</td></tr>';
+                        return;
                     }}
+                    tbody.innerHTML = data.map((row, i) =>
+                        `<tr><td>${{i+1}}</td><td>${{row.timestamp}}</td><td class="coord">${{row.lat}}</td><td class="coord">${{row.lon}}</td><td>${{row.device}}</td></tr>`
+                    ).join('');
+                }});
+
+                // Polilinea: ultimas 16 horas
+                fetch('/api/history/hours?hours=16').then(r => r.json()).then(data => {{
+                    if (!data || data.length < 2) return;
+                    var points = data.slice().reverse().map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
+                    var coords = points.map(p => p[1] + ',' + p[0]).join(';');
+                    fetch('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson')
+                        .then(r => r.json()).then(osrm => {{
+                            if (osrm.code !== 'Ok') return;
+                            var routeCoords = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                            if (routeLine) {{ map.removeLayer(routeLine); }}
+                            routeLine = L.polyline(routeCoords, {{color: '#e879a0', weight: 4, opacity: 0.85, smoothFactor: 1}}).addTo(map);
+                        }}).catch(err => console.error('OSRM error:', err));
                 }});
             }}
+
             function fetchStats() {{
                 fetch('/api/stats').then(r => r.json()).then(data => {{
                     document.getElementById('stat-total').textContent = data.total_records.toLocaleString();
@@ -263,6 +295,7 @@ def index():
                     document.getElementById('stat-last').textContent  = data.last_record  || '---';
                 }});
             }}
+
             function updateAll() {{ fetchLatest(); fetchHistory(); fetchStats(); }}
             window.onload = updateAll;
             setInterval(updateAll, 2000);
