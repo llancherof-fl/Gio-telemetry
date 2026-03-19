@@ -19,11 +19,11 @@ jobs:
           script: |
             bash ~/start.sh
 
-  deploy-compañera2:
+  deploy-companera2:
     name: Deploy → web-server-2 (54.84.31.103)
     runs-on: ubuntu-latest
     steps:
-      - name: SSH y deploy en EC2 Compañera 2
+      - name: SSH y deploy en EC2 Companera 2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST_COMPANERA2 }}
@@ -32,11 +32,11 @@ jobs:
           script: |
             bash ~/start.sh
 
-  deploy-compañera3:
+  deploy-companera3:
     name: Deploy → gio-web-server (50.19.23.123)
     runs-on: ubuntu-latest
     steps:
-      - name: SSH y deploy en EC2 Compañera 3
+      - name: SSH y deploy en EC2 Companera 3
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST_COMPANERA3 }}
