@@ -160,37 +160,37 @@ def index():
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ font-family: 'Courier New', Courier, monospace; background-color: #0e0b14; color: #d9c9e8; padding: 20px 30px; }}
-            .header {{ border-bottom: 1px solid #3b2d52; padding-bottom: 14px; margin-bottom: 20px; }}
-            .header h1 {{ color: #c084c8; font-size: 1.4rem; margin-bottom: 5px; }}
-            .header .meta {{ color: #8b7a9e; font-size: 0.82rem; }}
+            body {{ font-family: 'Courier New', Courier, monospace; background-color: #0d1117; color: #c9d1d9; padding: 20px 30px; }}
+            .header {{ border-bottom: 1px solid #21362a; padding-bottom: 14px; margin-bottom: 20px; }}
+            .header h1 {{ color: #3fb950; font-size: 1.4rem; margin-bottom: 5px; }}
+            .header .meta {{ color: #7d8590; font-size: 0.82rem; }}
             .status-bar {{ display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }}
-            .status-item {{ background: #1a1225; border: 1px solid #3b2d52; border-radius: 6px; padding: 10px 16px; font-size: 0.82rem; }}
-            .status-item .label {{ color: #8b7a9e; }}
-            .status-item .value {{ color: #e89bcf; font-weight: bold; }}
-            .status-item .value.warning {{ color: #c9a0dc; }}
+            .status-item {{ background: #161b22; border: 1px solid #21362a; border-radius: 6px; padding: 10px 16px; font-size: 0.82rem; }}
+            .status-item .label {{ color: #7d8590; }}
+            .status-item .value {{ color: #58a6ff; font-weight: bold; }}
+            .status-item .value.warning {{ color: #3fb950; }}
             .main-grid {{ display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 420px auto; gap: 18px; margin-bottom: 20px; }}
             @media (max-width: 900px) {{ .main-grid {{ grid-template-columns: 1fr; }} }}
-            .card {{ border: 1px solid #3b2d52; background: #1a1225; padding: 16px; border-radius: 6px; overflow: hidden; }}
-            .card h2 {{ color: #c084c8; font-size: 0.95rem; margin-bottom: 12px; }}
+            .card {{ border: 1px solid #21362a; background: #161b22; padding: 16px; border-radius: 6px; overflow: hidden; }}
+            .card h2 {{ color: #3fb950; font-size: 0.95rem; margin-bottom: 12px; }}
             .badge {{ display: inline-block; padding: 2px 7px; border-radius: 4px; font-weight: bold; font-size: 0.7rem; margin-right: 6px; }}
-            .badge-udp {{ background: #6b2d6b; color: #f0c0f0; }}
-            .badge-live {{ background: #7a2d5a; color: #f0c0d8; animation: pulse 2s infinite; }}
-            .badge-map {{ background: #4a2070; color: #d4a8f0; }}
+            .badge-udp {{ background: #1f4d2e; color: #56d364; }}
+            .badge-live {{ background: #1b3a5c; color: #79c0ff; animation: pulse 2s infinite; }}
+            .badge-map {{ background: #1f4d2e; color: #56d364; }}
             @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.5}} }}
-            #map {{ width: 100%; height: 340px; border-radius: 4px; border: 1px solid #3b2d52; }}
+            #map {{ width: 100%; height: 340px; border-radius: 4px; border: 1px solid #21362a; }}
             .rt-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
-            .rt-field .label {{ color: #8b7a9e; font-size: 0.78rem; margin-bottom: 2px; }}
-            .rt-field .value {{ color: #e89bcf; font-size: 1rem; font-weight: bold; }}
-            .table-wrap {{ height: 340px; overflow-y: auto; border: 1px solid #3b2d52; border-radius: 4px; }}
+            .rt-field .label {{ color: #7d8590; font-size: 0.78rem; margin-bottom: 2px; }}
+            .rt-field .value {{ color: #58a6ff; font-size: 1rem; font-weight: bold; }}
+            .table-wrap {{ height: 340px; overflow-y: auto; border: 1px solid #21362a; border-radius: 4px; }}
             table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; }}
-            thead th {{ background: #251835; color: #c084c8; padding: 7px 9px; text-align: left; position: sticky; top: 0; border-bottom: 1px solid #3b2d52; }}
-            tbody tr {{ border-bottom: 1px solid #1e1428; }}
-            tbody tr:hover {{ background: #1e1428; }}
-            td {{ padding: 6px 9px; color: #d9c9e8; }}
-            td.coord {{ color: #d4a8f0; }}
-            .no-data {{ color: #8b7a9e; text-align: center; padding: 20px; }}
-            .footer {{ color: #8b7a9e; font-size: 0.75rem; text-align: center; margin-top: 10px; }}
+            thead th {{ background: #161b22; color: #3fb950; padding: 7px 9px; text-align: left; position: sticky; top: 0; border-bottom: 1px solid #21362a; }}
+            tbody tr {{ border-bottom: 1px solid #1c2128; }}
+            tbody tr:hover {{ background: #1c2128; }}
+            td {{ padding: 6px 9px; color: #c9d1d9; }}
+            td.coord {{ color: #79c0ff; }}
+            .no-data {{ color: #7d8590; text-align: center; padding: 20px; }}
+            .footer {{ color: #7d8590; font-size: 0.75rem; text-align: center; margin-top: 10px; }}
         </style>
     </head>
     <body>
@@ -225,7 +225,7 @@ def index():
         <div class="footer">GIO Telemetry System &mdash; AWS Cloud &mdash; PostgreSQL RDS &mdash; Actualizando cada 2s</div>
         <script>
             var map = L.map('map').setView([4.6097, -74.0817], 13);
-            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{attribution: '© OpenStreetMap contributors'}}).addTo(map);
+            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{attribution: '&copy; OpenStreetMap contributors'}}).addTo(map);
             var vehicleIcon = L.divIcon({{html: '<span style="font-size:26px;filter:hue-rotate(300deg) saturate(4) brightness(1.3)">&#x1F697;</span>', iconSize: [30, 30], className: ''}});
             var marker = null, routeLine = null, firstPosition = true;
             function fetchLatest() {{
@@ -251,7 +251,7 @@ def index():
                                 if (osrm.code !== 'Ok') return;
                                 var routeCoords = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                                 if (routeLine) {{ map.removeLayer(routeLine); }}
-                                routeLine = L.polyline(routeCoords, {{color: '#e879a0', weight: 4, opacity: 0.85, smoothFactor: 1}}).addTo(map);
+                                routeLine = L.polyline(routeCoords, {{color: '#58a6ff', weight: 4, opacity: 0.85, smoothFactor: 1}}).addTo(map);
                             }}).catch(err => console.error('OSRM error:', err));
                     }}
                 }});
