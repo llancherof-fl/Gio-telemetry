@@ -20,7 +20,7 @@ jobs:
             bash ~/Gio-telemetry/start.sh
 
   deploy-companera2:
-    name: Deploy → web-server-2 (54.84.31.103)
+    name: Deploy → gio-web-LauraL (54.84.31.103)
     runs-on: ubuntu-latest
     steps:
       - name: SSH y deploy en EC2 Companera 2
@@ -33,7 +33,7 @@ jobs:
             bash ~/Gio-telemetry/start.sh
 
   deploy-companera3:
-    name: Deploy → gio-web-server (50.19.23.123)
+    name: Deploy → gio-web-LauraC (50.19.23.123)
     runs-on: ubuntu-latest
     steps:
       - name: SSH y deploy en EC2 Companera 3
@@ -46,7 +46,7 @@ jobs:
             bash ~/Gio-telemetry/start.sh
 
   deploy-sebastian:
-    name: Deploy → GIO-WEB-SEBASTIAN (44.195.251.222)
+    name: Deploy → gio-web-Sebastian (44.195.251.222)
     runs-on: ubuntu-latest
     steps:
       - name: SSH y deploy en EC2 Sebastian
