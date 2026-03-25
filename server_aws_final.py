@@ -195,7 +195,7 @@ def index():
     </head>
     <body>
         <div class="header">
-            <h1>&#x1F4E1; GIOOOOOOO grupo 2</h1>
+            <h1>&#x1F4E1; GIOOOOOOO GRUPO 2 DASHBOARD</h1>
             <div class="meta">Servidor: <strong>{EC2_NAME}</strong> &mdash; PostgreSQL RDS &mdash; AWS</div>
         </div>
         <div class="status-bar">
