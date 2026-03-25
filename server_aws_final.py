@@ -193,7 +193,7 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{EC2_NAME} · GIO GRUPO 2 Telemetry</title>
+    <title>{EC2_NAME} · GIO Telemetry</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -627,7 +627,7 @@ def index():
 <!-- NAVBAR -->
 <nav>
     <div class="nav-brand">
-        📡 <span>GIO</span>&nbsp;TELEMETRY
+        📡 <span>GIO GRUPO 2=)</span>&nbsp;TELEMETRY
     </div>
     <div class="nav-tabs">
         <button class="nav-tab active" onclick="switchView('realtime')" id="tab-rt">
