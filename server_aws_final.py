@@ -188,558 +188,547 @@ def api_stats():
 # ==========================================
 @app.route('/')
 def index():
-    html = f"""<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{EC2_NAME} · GIO Telemetry</title>
+    <title>""" + EC2_NAME + """ · GIO Telemetry</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root {{
-            --bg:        #080612;
-            --surface:   #110e1e;
-            --surface2:  #1a1530;
-            --border:    #2a2240;
-            --border2:   #3d3060;
-            --pink:      #e879a0;
-            --pink-dim:  #9d3d62;
-            --purple:    #b06ef3;
-            --purple-dim:#5c3585;
-            --lavender:  #c4a8ff;
-            --text:      #e8deff;
-            --text-dim:  #8b7aaa;
-            --text-faint:#4a3d6a;
-            --green:     #4ade80;
-            --radius:    10px;
-        }}
-        *, *::before, *::after {{ margin:0; padding:0; box-sizing:border-box; }}
-        html, body {{ height:100%; }}
-        body {{
-            font-family: 'DM Sans', sans-serif;
+        /* ═══════════════════════════════════════════
+           BLUE TERMINAL PALETTE — GIO TELEMETRY
+           ═══════════════════════════════════════════ */
+        :root {
+            --bg:            #0a0e1a;
+            --bg-card:       #0f1525;
+            --bg-card-hover: #141c30;
+            --bg-input:      #111827;
+            --border:        #1e2a4a;
+            --border-hover:  #2d3f6e;
+            --border-accent: #3b5bdb;
+
+            /* Blues */
+            --blue-bright:   #4dabf7;
+            --blue-light:    #74c0fc;
+            --blue-medium:   #339af0;
+            --blue-dim:      rgba(77, 171, 247, 0.12);
+            --blue-glow:     rgba(77, 171, 247, 0.08);
+
+            /* Green accents — active states */
+            --green:         #51cf66;
+            --green-dim:     rgba(81, 207, 102, 0.12);
+            --green-border:  rgba(81, 207, 102, 0.3);
+
+            /* Orange for highlights */
+            --orange:        #ffa94d;
+            --orange-dim:    rgba(255, 169, 77, 0.12);
+
+            /* Text hierarchy */
+            --text:          #e1e8f5;
+            --text-secondary:#8da0c2;
+            --text-muted:    #4a5e85;
+
+            /* Route colors */
+            --route-live:    #4dabf7;
+            --route-hist:    #748ffc;
+
+            --radius:      10px;
+            --radius-sm:   7px;
+            --radius-lg:   14px;
+            --transition:  0.2s ease;
+        }
+
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+        body {
+            font-family: 'Roboto', sans-serif;
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
             overflow-x: hidden;
-        }}
+        }
 
         /* ── NAVBAR ── */
-        nav {{
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 28px;
-            height: 58px;
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-        }}
-        .nav-brand {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-family: 'Space Mono', monospace;
-            font-size: 0.9rem;
-            color: var(--purple);
-            letter-spacing: 0.04em;
-        }}
-        .nav-brand span {{ color: var(--pink); }}
-        .nav-tabs {{
-            display: flex;
-            gap: 4px;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 4px;
-        }}
-        .nav-tab {{
-            padding: 7px 20px;
-            border-radius: 6px;
-            border: none;
-            background: transparent;
-            color: var(--text-dim);
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.82rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }}
-        .nav-tab.active {{
-            background: var(--purple-dim);
-            color: var(--lavender);
-        }}
-        .nav-tab:hover:not(.active) {{ color: var(--text); }}
-        .nav-meta {{
-            font-family: 'Space Mono', monospace;
-            font-size: 0.72rem;
-            color: var(--text-faint);
-        }}
-        .dot-live {{
-            width: 7px; height: 7px;
-            border-radius: 50%;
-            background: var(--green);
-            animation: blink 1.4s ease-in-out infinite;
-        }}
-        @keyframes blink {{ 0%,100%{{opacity:1}} 50%{{opacity:0.2}} }}
+        nav {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 24px; height:54px;
+            background: var(--bg-card);
+            border-bottom:1px solid var(--border);
+            position:sticky; top:0; z-index:50;
+        }
+        .nav-brand {
+            display:flex; align-items:center; gap:10px;
+            font-family:'Roboto Mono',monospace;
+            font-size:0.88rem; font-weight:700;
+            color:var(--blue-bright);
+            letter-spacing:0.05em;
+        }
+        .nav-brand .brand-icon {
+            font-size:18px;
+        }
+        .nav-brand .brand-sub {
+            color:var(--text-secondary);
+            font-weight:400;
+        }
+        .nav-tabs {
+            display:flex; gap:2px;
+            background:var(--bg-input);
+            border:1px solid var(--border);
+            border-radius:var(--radius); padding:3px;
+        }
+        .nav-tab {
+            padding:7px 20px;
+            border-radius:calc(var(--radius) - 3px);
+            border:none; background:transparent;
+            color:var(--text-muted);
+            font-family:'Roboto',sans-serif;
+            font-size:0.8rem; font-weight:500;
+            cursor:pointer; transition:all var(--transition);
+            display:flex; align-items:center; gap:7px;
+            white-space:nowrap;
+        }
+        .nav-tab.active {
+            background:var(--blue-dim);
+            color:var(--blue-bright);
+            border:1px solid rgba(77,171,247,0.2);
+        }
+        .nav-tab:hover:not(.active) { color:var(--text-secondary); }
+        .nav-meta {
+            font-family:'Roboto Mono',monospace;
+            font-size:0.7rem; color:var(--text-muted);
+        }
+        .dot-live {
+            width:6px; height:6px; border-radius:50%;
+            background:var(--green);
+            box-shadow:0 0 8px rgba(81,207,102,0.6);
+            animation:pulse-dot 2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%,100% { opacity:1; box-shadow:0 0 8px rgba(81,207,102,0.6); }
+            50% { opacity:0.35; box-shadow:0 0 3px rgba(81,207,102,0.2); }
+        }
 
         /* ── VIEWS ── */
-        .view {{ display: none; padding: 24px 28px; }}
-        .view.active {{ display: block; }}
+        .view { display:none; padding:20px 24px; }
+        .view.active { display:block; animation:fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
 
         /* ── STATS BAR ── */
-        .stats-bar {{
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }}
-        .stat-chip {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 10px 18px;
-            font-size: 0.8rem;
-        }}
-        .stat-chip .lbl {{ color: var(--text-dim); margin-bottom: 2px; }}
-        .stat-chip .val {{
-            color: var(--pink);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.9rem;
-            font-weight: 700;
-        }}
+        .stats-bar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+        .stat-chip {
+            background:var(--bg-card); border:1px solid var(--border);
+            border-radius:var(--radius-sm); padding:10px 16px;
+            flex:1; min-width:140px;
+            transition:border-color var(--transition);
+        }
+        .stat-chip:hover { border-color:var(--border-hover); }
+        .stat-chip .lbl {
+            font-size:0.68rem; color:var(--text-muted);
+            text-transform:uppercase; letter-spacing:0.08em;
+            font-weight:500; margin-bottom:4px;
+        }
+        .stat-chip .val {
+            color:var(--blue-bright);
+            font-family:'Roboto Mono',monospace;
+            font-size:0.88rem; font-weight:700;
+        }
 
         /* ── GRID ── */
-        .rt-grid {{
-            display: grid;
-            grid-template-columns: 1fr 340px;
-            grid-template-rows: 420px auto;
-            gap: 16px;
-        }}
-        @media(max-width:900px) {{ .rt-grid {{ grid-template-columns: 1fr; }} }}
+        .rt-grid {
+            display:grid;
+            grid-template-columns:1fr 320px;
+            grid-template-rows:400px auto;
+            gap:12px;
+        }
+        @media(max-width:960px) { .rt-grid { grid-template-columns:1fr; } }
 
-        .card {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-        }}
-        .card-header {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 14px 18px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--lavender);
-        }}
-        .badge {{
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            font-family: 'Space Mono', monospace;
-        }}
-        .badge-pink  {{ background: var(--pink-dim);   color: #ffc6d9; }}
-        .badge-purple{{ background: var(--purple-dim); color: var(--lavender); }}
-        .badge-green {{ background: #1a4a2a; color: var(--green); }}
+        /* ── CARD ── */
+        .card {
+            background:var(--bg-card); border:1px solid var(--border);
+            border-radius:var(--radius); overflow:hidden;
+            transition:border-color var(--transition);
+        }
+        .card:hover { border-color:var(--border-hover); }
+        .card-header {
+            display:flex; align-items:center; gap:8px;
+            padding:12px 16px; border-bottom:1px solid var(--border);
+            font-size:0.78rem; font-weight:500; color:var(--text-secondary);
+        }
 
-        #map-rt, #map-hist {{
-            width: 100%;
-            height: 100%;
-        }}
-        .map-card {{ height: 420px; }}
+        /* ── BADGES ── */
+        .badge {
+            padding:2px 8px; border-radius:5px;
+            font-size:0.65rem; font-weight:700;
+            font-family:'Roboto Mono',monospace;
+            letter-spacing:0.04em; text-transform:uppercase;
+        }
+        .badge-live {
+            background:var(--green-dim); color:var(--green);
+            border:1px solid var(--green-border);
+        }
+        .badge-blue {
+            background:var(--blue-dim); color:var(--blue-bright);
+            border:1px solid rgba(77,171,247,0.2);
+        }
+        .badge-orange {
+            background:var(--orange-dim); color:var(--orange);
+            border:1px solid rgba(255,169,77,0.2);
+        }
+
+        /* ── MAP — CLASSIC WHITE OSM ── */
+        #map-rt, #map-hist { width:100%; height:100%; }
+        .map-card { height:400px; }
+        .leaflet-container { background:#e8ecf1 !important; }
+        /* NO filter on tiles — classic white OpenStreetMap */
+        .leaflet-control-zoom a {
+            background:var(--bg-card) !important;
+            color:var(--blue-bright) !important;
+            border-color:var(--border) !important;
+        }
+        .leaflet-control-zoom a:hover { background:var(--bg-card-hover) !important; }
+        .leaflet-control-attribution { font-size:9px !important; }
+        .leaflet-popup-content-wrapper {
+            background:var(--bg-card) !important;
+            color:var(--text) !important;
+            border:1px solid var(--border-hover) !important;
+            border-radius:var(--radius-sm) !important;
+            box-shadow:0 8px 24px rgba(0,0,0,0.4) !important;
+        }
+        .leaflet-popup-tip { background:var(--bg-card) !important; }
+        .leaflet-popup-content { font-family:'Roboto',sans-serif !important; font-size:0.8rem !important; }
 
         /* ── LIVE PANEL ── */
-        .live-panel {{
-            padding: 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }}
-        .live-field .lbl {{
-            font-size: 0.72rem;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 4px;
-        }}
-        .live-field .val {{
-            font-family: 'Space Mono', monospace;
-            font-size: 1rem;
-            color: var(--pink);
-            font-weight: 700;
-        }}
-        .live-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }}
-        .no-data {{
-            color: var(--text-faint);
-            font-size: 0.82rem;
-            text-align: center;
-            padding: 24px;
-            font-style: italic;
-        }}
+        .live-panel { padding:16px; display:flex; flex-direction:column; gap:12px; }
+        .live-field {
+            padding:10px 12px;
+            background:var(--bg-input);
+            border-radius:var(--radius-sm);
+            border:1px solid transparent;
+            transition:border-color var(--transition);
+        }
+        .live-field:hover { border-color:var(--border); }
+        .live-field .lbl {
+            font-size:0.65rem; color:var(--text-muted);
+            text-transform:uppercase; letter-spacing:0.1em;
+            font-weight:500; margin-bottom:4px;
+        }
+        .live-field .val {
+            font-family:'Roboto Mono',monospace;
+            font-size:0.92rem; color:var(--blue-bright); font-weight:700;
+        }
+        .live-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .no-data {
+            color:var(--text-muted); font-size:0.8rem;
+            text-align:center; padding:24px 16px;
+        }
+        .no-data-icon { font-size:1.6rem; margin-bottom:8px; opacity:0.5; }
 
-        /* ── HISTÓRICO ── */
-        .hist-layout {{
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 16px;
-        }}
-        @media(max-width:900px) {{ .hist-layout {{ grid-template-columns: 1fr; }} }}
+        /* ── HISTÓRICO LAYOUT ── */
+        .hist-layout { display:grid; grid-template-columns:1fr 360px; gap:12px; }
+        @media(max-width:960px) { .hist-layout { grid-template-columns:1fr; } }
+        .hist-map-card { height:480px; }
 
-        .hist-map-card {{ height: 500px; }}
+        /* ── FILTER BAR ── */
+        .filter-bar {
+            display:flex; align-items:center;
+            gap:8px; margin-bottom:14px; flex-wrap:wrap;
+        }
+        .filter-bar select, .filter-bar input {
+            background:var(--bg-card); border:1px solid var(--border);
+            border-radius:var(--radius-sm); padding:8px 14px;
+            color:var(--text); font-family:'Roboto',sans-serif;
+            font-size:0.8rem; outline:none; cursor:pointer;
+            transition:border-color var(--transition);
+        }
+        .filter-bar select:focus, .filter-bar input:focus { border-color:var(--blue-medium); }
+        .filter-bar select option { background:var(--bg-card); color:var(--text); }
 
-        .filter-bar {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }}
-        .filter-bar select, .filter-bar input {{
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 8px;
-            padding: 8px 14px;
-            color: var(--text);
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.82rem;
-            outline: none;
-            cursor: pointer;
-        }}
-        .filter-bar select:focus, .filter-bar input:focus {{
-            border-color: var(--purple);
-        }}
-        .btn {{
-            padding: 8px 18px;
-            border-radius: 8px;
-            border: none;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.82rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.18s;
-        }}
-        .btn-primary {{
-            background: var(--purple-dim);
-            color: var(--lavender);
-        }}
-        .btn-primary:hover {{ background: #7a4ab0; }}
-        .btn-outline {{
-            background: transparent;
-            border: 1px solid var(--border2);
-            color: var(--text-dim);
-        }}
-        .btn-outline:hover {{ border-color: var(--purple); color: var(--text); }}
-        .btn-pink {{
-            background: var(--pink-dim);
-            color: #ffc6d9;
-        }}
-        .btn-pink:hover {{ background: #b84070; }}
+        /* ── BUTTONS ── */
+        .btn {
+            padding:8px 18px; border-radius:var(--radius-sm);
+            border:none; font-family:'Roboto',sans-serif;
+            font-size:0.8rem; font-weight:500; cursor:pointer;
+            transition:all var(--transition);
+            display:inline-flex; align-items:center; gap:6px;
+        }
+        .btn-primary {
+            background:rgba(77,171,247,0.15); color:var(--blue-bright);
+            border:1px solid rgba(77,171,247,0.3);
+        }
+        .btn-primary:hover {
+            background:rgba(77,171,247,0.25);
+            border-color:var(--blue-bright);
+            box-shadow:0 0 16px rgba(77,171,247,0.12);
+        }
+        .btn-outline {
+            background:transparent; border:1px solid var(--border);
+            color:var(--text-secondary);
+        }
+        .btn-outline:hover {
+            border-color:var(--border-hover); color:var(--text);
+            background:var(--bg-card-hover);
+        }
 
         /* ── MODAL ── */
-        .modal-overlay {{
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(8,6,18,0.85);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(4px);
-        }}
-        .modal-overlay.open {{ display: flex; }}
-        .modal {{
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 14px;
-            padding: 28px;
-            width: 420px;
-            max-width: 95vw;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.6);
-        }}
-        .modal h3 {{
-            font-family: 'Space Mono', monospace;
-            font-size: 1rem;
-            color: var(--lavender);
-            margin-bottom: 20px;
-        }}
-        .modal-field {{
-            margin-bottom: 16px;
-        }}
-        .modal-field label {{
-            display: block;
-            font-size: 0.78rem;
-            color: var(--text-dim);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }}
-        .modal-field input {{
-            width: 100%;
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-radius: 8px;
-            padding: 10px 14px;
-            color: var(--text);
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.88rem;
-            outline: none;
-        }}
-        .modal-field input:focus {{ border-color: var(--purple); }}
-        .modal-actions {{
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
-        }}
-        .quick-ranges {{
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }}
-        .quick-btn {{
-            padding: 5px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--border2);
-            background: var(--surface2);
-            color: var(--text-dim);
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.15s;
-        }}
-        .quick-btn:hover {{ border-color: var(--purple); color: var(--lavender); }}
+        .modal-overlay {
+            display:none; position:fixed; inset:0;
+            background:rgba(10,14,26,0.9);
+            z-index:9999; align-items:center; justify-content:center;
+            backdrop-filter:blur(4px);
+        }
+        .modal-overlay.open { display:flex; }
+        .modal {
+            background:var(--bg-card);
+            border:1px solid var(--border-hover);
+            border-radius:var(--radius-lg);
+            padding:24px; width:400px; max-width:92vw;
+            box-shadow:0 24px 60px rgba(0,0,0,0.6);
+            animation:modalIn 0.25s ease-out;
+            position:relative; z-index:10000;
+        }
+        @keyframes modalIn {
+            from{opacity:0;transform:scale(0.95) translateY(10px)}
+            to{opacity:1;transform:scale(1) translateY(0)}
+        }
+        .modal h3 {
+            font-family:'Roboto',sans-serif;
+            font-size:0.95rem; font-weight:700;
+            color:var(--text); margin-bottom:18px;
+            display:flex; align-items:center; gap:8px;
+        }
+        .modal-field { margin-bottom:14px; }
+        .modal-field label {
+            display:block; font-size:0.7rem;
+            color:var(--text-muted); margin-bottom:6px;
+            text-transform:uppercase; letter-spacing:0.08em; font-weight:500;
+        }
+        .modal-field input {
+            width:100%; background:var(--bg-input);
+            border:1px solid var(--border);
+            border-radius:var(--radius-sm);
+            padding:10px 14px; color:var(--text);
+            font-family:'Roboto',sans-serif;
+            font-size:0.85rem; outline:none;
+            transition:border-color var(--transition);
+        }
+        .modal-field input:focus { border-color:var(--blue-medium); }
+        .modal-field input::-webkit-calendar-picker-indicator {
+            filter:invert(0.6) sepia(0.2) hue-rotate(190deg);
+        }
+        .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+        .quick-ranges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+        .quick-btn {
+            padding:5px 12px; border-radius:6px;
+            border:1px solid var(--border);
+            background:var(--bg-input); color:var(--text-muted);
+            font-size:0.72rem; font-weight:500;
+            cursor:pointer; transition:all var(--transition);
+        }
+        .quick-btn:hover {
+            border-color:var(--blue-medium); color:var(--blue-bright);
+            background:var(--blue-dim);
+        }
 
         /* ── RESULTS PANEL ── */
-        .results-panel {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-            height: 500px;
-            display: flex;
-            flex-direction: column;
-        }}
-        .results-header {{
-            padding: 14px 18px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.82rem;
-        }}
-        .results-count {{
-            font-family: 'Space Mono', monospace;
-            color: var(--pink);
-            font-size: 0.78rem;
-        }}
-        .results-list {{
-            overflow-y: auto;
-            flex: 1;
-            padding: 8px;
-        }}
-        .result-item {{
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.15s;
-            border-bottom: 1px solid var(--border);
-        }}
-        .result-item:last-child {{ border-bottom: none; }}
-        .result-item:hover {{ background: var(--surface2); }}
-        .result-dot {{
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: var(--pink);
-            flex-shrink: 0;
-        }}
-        .result-coords {{
-            font-family: 'Space Mono', monospace;
-            font-size: 0.72rem;
-            color: var(--lavender);
-        }}
-        .result-time {{
-            font-size: 0.72rem;
-            color: var(--text-dim);
-            margin-left: auto;
-        }}
-        .result-device {{
-            font-size: 0.7rem;
-            color: var(--text-faint);
-        }}
+        .results-panel {
+            background:var(--bg-card); border:1px solid var(--border);
+            border-radius:var(--radius); overflow:hidden;
+            height:480px; display:flex; flex-direction:column;
+        }
+        .results-header {
+            padding:12px 16px; border-bottom:1px solid var(--border);
+            display:flex; align-items:center;
+            justify-content:space-between; font-size:0.78rem;
+        }
+        .results-count {
+            font-family:'Roboto Mono',monospace;
+            color:var(--blue-bright); font-size:0.75rem; font-weight:500;
+        }
+        .results-list { overflow-y:auto; flex:1; padding:6px; }
+        .result-item {
+            display:flex; align-items:center; gap:12px;
+            padding:10px 12px; border-radius:var(--radius-sm);
+            cursor:pointer; transition:all var(--transition); margin-bottom:2px;
+        }
+        .result-item:hover { background:var(--bg-card-hover); }
+        .result-item:active { transform:scale(0.997); }
+        .result-index {
+            width:26px; height:26px; border-radius:6px;
+            background:var(--blue-dim);
+            border:1px solid rgba(77,171,247,0.15);
+            display:flex; align-items:center; justify-content:center;
+            font-family:'Roboto Mono',monospace;
+            font-size:0.65rem; font-weight:700;
+            color:var(--blue-bright); flex-shrink:0;
+        }
+        .result-info { flex:1; min-width:0; }
+        .result-coords {
+            font-family:'Roboto Mono',monospace;
+            font-size:0.72rem; color:var(--text); font-weight:500;
+        }
+        .result-device { font-size:0.68rem; color:var(--text-muted); margin-top:1px; }
+        .result-time {
+            font-family:'Roboto Mono',monospace;
+            font-size:0.7rem; color:var(--text-secondary); flex-shrink:0;
+        }
 
         /* ── SCROLLBAR ── */
-        ::-webkit-scrollbar {{ width: 4px; }}
-        ::-webkit-scrollbar-track {{ background: var(--surface); }}
-        ::-webkit-scrollbar-thumb {{ background: var(--border2); border-radius: 4px; }}
+        ::-webkit-scrollbar { width:4px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:var(--border-hover); border-radius:4px; }
 
         /* ── FOOTER ── */
-        .footer {{
-            text-align: center;
-            padding: 20px;
-            font-family: 'Space Mono', monospace;
-            font-size: 0.68rem;
-            color: var(--text-faint);
-            border-top: 1px solid var(--border);
-            margin-top: 12px;
-        }}
+        .footer {
+            text-align:center; padding:18px;
+            font-size:0.68rem; color:var(--text-muted);
+            border-top:1px solid var(--border); margin-top:12px;
+            font-family:'Roboto Mono',monospace;
+        }
+        .footer span { color:var(--blue-bright); font-weight:500; }
 
         /* ── TOAST ── */
-        .toast {{
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-radius: 10px;
-            padding: 12px 20px;
-            font-size: 0.82rem;
-            color: var(--text);
-            z-index: 300;
-            transform: translateY(80px);
-            opacity: 0;
-            transition: all 0.3s;
-            pointer-events: none;
-        }}
-        .toast.show {{ transform: translateY(0); opacity: 1; }}
-        .leaflet-container {{ background: #1a1530 !important; }}
+        .toast {
+            position:fixed; bottom:20px; right:20px;
+            background:var(--bg-card);
+            border:1px solid var(--border-hover);
+            border-radius:var(--radius); padding:12px 20px;
+            font-size:0.8rem; color:var(--text);
+            z-index:10001;
+            transform:translateY(80px); opacity:0;
+            transition:all 0.3s ease;
+            pointer-events:none;
+            box-shadow:0 8px 30px rgba(0,0,0,0.5);
+        }
+        .toast.show { transform:translateY(0); opacity:1; }
+
+        .skeleton {
+            background:linear-gradient(90deg, var(--bg-input) 25%, var(--bg-card-hover) 50%, var(--bg-input) 75%);
+            background-size:200% 100%;
+            animation:shimmer 1.5s infinite; border-radius:4px;
+        }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        @media(max-width:640px) {
+            nav { padding:0 14px; height:50px; }
+            .nav-meta { display:none; }
+            .view { padding:14px; }
+            .stat-chip { padding:8px 12px; min-width:100px; }
+        }
     </style>
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav>
     <div class="nav-brand">
-        📡 <span>GIO GRUPO 2=)</span>&nbsp;TELEMETRY
+        <span class="brand-icon">📡</span>
+        GIO <span class="brand-sub">TELEMETRY</span>
     </div>
     <div class="nav-tabs">
         <button class="nav-tab active" onclick="switchView('realtime')" id="tab-rt">
             <div class="dot-live"></div> Tiempo Real
         </button>
         <button class="nav-tab" onclick="switchView('historical')" id="tab-hist">
-            🗂 Histórico
+            📁 Histórico
         </button>
     </div>
-    <div class="nav-meta">{EC2_NAME}</div>
+    <div class="nav-meta">""" + EC2_NAME + """</div>
 </nav>
 
-<!-- ── VISTA TIEMPO REAL ── -->
+<!-- VISTA TIEMPO REAL -->
 <div class="view active" id="view-realtime">
     <div class="stats-bar">
         <div class="stat-chip">
             <div class="lbl">Total registros</div>
-            <div class="val" id="stat-total">—</div>
+            <div class="val" id="stat-total">&mdash;</div>
         </div>
         <div class="stat-chip">
             <div class="lbl">Primer registro</div>
-            <div class="val" id="stat-first">—</div>
+            <div class="val" id="stat-first">&mdash;</div>
         </div>
         <div class="stat-chip">
             <div class="lbl">Último registro</div>
-            <div class="val" id="stat-last">—</div>
+            <div class="val" id="stat-last">&mdash;</div>
         </div>
         <div class="stat-chip">
             <div class="lbl">Puntos en ruta</div>
-            <div class="val" id="stat-route-pts">—</div>
+            <div class="val" id="stat-route-pts">0</div>
         </div>
     </div>
-
     <div class="rt-grid">
-        <!-- Mapa -->
         <div class="card map-card">
             <div class="card-header">
-                <span class="badge badge-pink">LIVE</span>
+                <span class="badge badge-live">● LIVE</span>
                 Geo-localización en Tiempo Real
             </div>
-            <div id="map-rt" style="height:calc(100% - 45px);"></div>
+            <div id="map-rt" style="height:calc(100% - 42px);"></div>
         </div>
-
-        <!-- Panel live -->
-        <div class="card" style="grid-row: span 2; display:flex; flex-direction:column;">
+        <div class="card" style="grid-row:span 2;display:flex;flex-direction:column;">
             <div class="card-header">
-                <span class="badge badge-green">●</span>
+                <span class="badge badge-blue">GPS</span>
                 Última Posición
             </div>
             <div class="live-panel" id="live-panel">
-                <p class="no-data">Cargando última posición...</p>
+                <div class="no-data"><div class="no-data-icon">📍</div>Cargando última posición...</div>
             </div>
         </div>
-
-        <!-- Info ruta -->
         <div class="card">
             <div class="card-header">
-                <span class="badge badge-purple">RUTA</span>
-                Recorrido desde este refresh
+                <span class="badge badge-orange">RUTA</span>
+                Recorrido de esta sesión
             </div>
             <div class="live-panel" id="route-info">
-                <p class="no-data">La polilínea se construye desde que abriste la página</p>
+                <div class="no-data"><div class="no-data-icon">🛣️</div>La polilínea se construye desde que abriste la página</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- ── VISTA HISTÓRICO ── -->
+<!-- VISTA HISTÓRICO -->
 <div class="view" id="view-historical">
     <div class="filter-bar">
         <select id="quick-select" onchange="applyQuickRange(this.value)">
-            <option value="">— Rango rápido —</option>
-            <option value="30m">Últimos 30 min</option>
-            <option value="1h">Última hora</option>
-            <option value="3h">Últimas 3 horas</option>
-            <option value="6h">Últimas 6 horas</option>
+            <option value="">Rango rápido</option>
+            <option value="30m">30 min</option>
+            <option value="1h">1 hora</option>
+            <option value="3h">3 horas</option>
+            <option value="6h">6 horas</option>
             <option value="today">Hoy</option>
             <option value="yesterday">Ayer</option>
             <option value="week">Esta semana</option>
         </select>
-        <button class="btn btn-outline" onclick="openModal()">📅 Rango personalizado</button>
+        <button class="btn btn-outline" onclick="openModal()">📅 Personalizado</button>
         <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
         <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>
-        <span id="hist-status" style="font-size:0.78rem; color:var(--text-dim); margin-left:4px;"></span>
+        <span id="hist-status" style="font-size:0.75rem;color:var(--text-muted);margin-left:2px;"></span>
     </div>
-
     <div class="hist-layout">
-        <!-- Mapa histórico -->
         <div class="card hist-map-card">
             <div class="card-header">
-                <span class="badge badge-purple">HIST</span>
+                <span class="badge badge-blue">HIST</span>
                 Recorrido en la ventana seleccionada
             </div>
-            <div id="map-hist" style="height:calc(100% - 45px);"></div>
+            <div id="map-hist" style="height:calc(100% - 42px);"></div>
         </div>
-
-        <!-- Lista de resultados -->
         <div class="results-panel">
             <div class="results-header">
-                <span style="color:var(--lavender); font-weight:600;">Registros encontrados</span>
-                <span class="results-count" id="results-count">—</span>
+                <span style="color:var(--text-secondary);font-weight:500;">Registros</span>
+                <span class="results-count" id="results-count">&mdash;</span>
             </div>
             <div class="results-list" id="results-list">
-                <p class="no-data">Selecciona un rango y presiona Buscar</p>
+                <div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- MODAL RANGO PERSONALIZADO -->
+<!-- MODAL -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
-    <div class="modal">
+    <div class="modal" onclick="event.stopPropagation()">
         <h3>📅 Rango personalizado</h3>
         <div class="quick-ranges">
             <button class="quick-btn" onclick="setQuick('30m')">30 min</button>
@@ -759,401 +748,335 @@ def index():
         </div>
         <div class="modal-actions">
             <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-pink" onclick="applyModal()">Aplicar</button>
+            <button class="btn btn-primary" onclick="applyModal()">Aplicar</button>
         </div>
     </div>
 </div>
 
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <footer class="footer">
-    GIO Telemetry · {EC2_NAME} · PostgreSQL RDS · AWS · Actualización cada 2s
+    <span>GIO Telemetry</span> &mdash; """ + EC2_NAME + """ &mdash; PostgreSQL RDS &mdash; AWS &mdash; Actualización cada 2s
 </footer>
 
 <script>
-// =============================================
-// ESTADO GLOBAL
-// =============================================
-var mapRT   = null;
-var mapHist = null;
-var markerRT    = null;
-var routeLineRT = null;
-var routeLineHist = null;
-var histMarkers = [];
-var firstPositionRT = true;
-var sessionPoints = [];  // puntos desde este refresh
-var currentRange  = {{ start: null, end: null }};
-var CACHE_KEY = 'gio_hist_cache';
-var CACHE_PTS  = 20; // puntos a guardar en localStorage
+var mapRT=null,mapHist=null;
+var markerRT=null,routeLineRT=null,routeLineHist=null;
+var histMarkers=[];
+var firstPositionRT=true;
+var sessionPoints=[];
+var currentRange={start:null,end:null};
+var CACHE_KEY='gio_hist_cache';
+var CACHE_PTS=20;
+var sessionStartTime=new Date().toLocaleTimeString('es-CO');
 
-// =============================================
-// INIT MAPAS
-// =============================================
-function initMaps() {{
-    var tileUrl = 'https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png';
-    var tileOpts = {{ attribution: '© OpenStreetMap' }};
-
-    mapRT = L.map('map-rt').setView([10.9878, -74.7889], 13);
-    L.tileLayer(tileUrl, tileOpts).addTo(mapRT);
-
-    mapHist = L.map('map-hist').setView([10.9878, -74.7889], 13);
-    L.tileLayer(tileUrl, tileOpts).addTo(mapHist);
-
-    // Cargar cache de localStorage en mapa histórico al inicio
+function initMaps(){
+    // CLASSIC WHITE OpenStreetMap — no filters
+    var tileUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    var tileOpts={attribution:'&copy; OpenStreetMap',maxZoom:19};
+    mapRT=L.map('map-rt').setView([10.9878,-74.7889],13);
+    L.tileLayer(tileUrl,tileOpts).addTo(mapRT);
+    mapHist=L.map('map-hist').setView([10.9878,-74.7889],13);
+    L.tileLayer(tileUrl,tileOpts).addTo(mapHist);
     loadCachedRoute();
-}}
+}
 
-function makeCarIcon() {{
-    return L.divIcon({{
-        html: '<span style="font-size:26px;filter:hue-rotate(300deg) saturate(4) brightness(1.3)">🚗</span>',
-        iconSize: [30, 30],
-        className: ''
-    }});
-}}
+function makeCarIcon(){
+    return L.divIcon({
+        html:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">'
+            +'<rect x="3" y="8" width="18" height="9" rx="3" fill="#339af0" stroke="#0a0e1a" stroke-width="1.2"/>'
+            +'<rect x="5" y="4.5" width="14" height="7" rx="2.5" fill="#4dabf7" stroke="#0a0e1a" stroke-width="1.2"/>'
+            +'<circle cx="7" cy="17.5" r="2.2" fill="#0a0e1a" stroke="#4dabf7" stroke-width="1.5"/>'
+            +'<circle cx="17" cy="17.5" r="2.2" fill="#0a0e1a" stroke="#4dabf7" stroke-width="1.5"/>'
+            +'<rect x="7" y="6" width="4" height="3.5" rx="0.8" fill="rgba(255,255,255,0.4)"/>'
+            +'<rect x="13" y="6" width="4" height="3.5" rx="0.8" fill="rgba(255,255,255,0.4)"/>'
+            +'<circle cx="12" cy="11" r="1" fill="#ffa94d"/>'
+            +'</svg>',
+        iconSize:[32,32],
+        iconAnchor:[16,22],
+        className:''
+    });
+}
 
-// =============================================
-// VISTA SWITCHER
-// =============================================
-function switchView(view) {{
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('view-' + view).classList.add('active');
-    document.getElementById('tab-' + (view === 'realtime' ? 'rt' : 'hist')).classList.add('active');
-    // Forzar resize del mapa activo
-    setTimeout(() => {{
-        if (view === 'realtime' && mapRT) mapRT.invalidateSize();
-        if (view === 'historical' && mapHist) mapHist.invalidateSize();
-    }}, 50);
-}}
+function switchView(view){
+    document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
+    document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('active')});
+    document.getElementById('view-'+view).classList.add('active');
+    document.getElementById('tab-'+(view==='realtime'?'rt':'hist')).classList.add('active');
+    setTimeout(function(){
+        if(view==='realtime'&&mapRT) mapRT.invalidateSize();
+        if(view==='historical'&&mapHist) mapHist.invalidateSize();
+    },80);
+}
 
-// =============================================
-// TIEMPO REAL — fetchLatest
-// =============================================
-function fetchLatest() {{
-    fetch('/api/latest').then(r => r.json()).then(data => {{
-        if (data.error) return;
-        var lat = parseFloat(data.lat);
-        var lon = parseFloat(data.lon);
-
-        // Marcador
-        if (!markerRT) {{
-            markerRT = L.marker([lat, lon], {{icon: makeCarIcon()}}).addTo(mapRT);
-        }} else {{
-            markerRT.setLatLng([lat, lon]);
-        }}
-        if (firstPositionRT) {{
-            mapRT.setView([lat, lon], 15);
-            firstPositionRT = false;
-        }}
-
-        // Agregar punto a la sesión actual
-        var lastPt = sessionPoints[sessionPoints.length - 1];
-        if (!lastPt || lastPt[0] !== lat || lastPt[1] !== lon) {{
-            sessionPoints.push([lat, lon]);
-            document.getElementById('stat-route-pts').textContent = sessionPoints.length;
+function fetchLatest(){
+    fetch('/api/latest').then(function(r){return r.json()}).then(function(data){
+        if(data.error) return;
+        var lat=parseFloat(data.lat);
+        var lon=parseFloat(data.lon);
+        if(!markerRT){
+            markerRT=L.marker([lat,lon],{icon:makeCarIcon()}).addTo(mapRT);
+        }else{
+            markerRT.setLatLng([lat,lon]);
+        }
+        if(firstPositionRT){
+            mapRT.setView([lat,lon],15);
+            firstPositionRT=false;
+        }
+        var lastPt=sessionPoints[sessionPoints.length-1];
+        if(!lastPt||lastPt[0]!==lat||lastPt[1]!==lon){
+            sessionPoints.push([lat,lon]);
+            document.getElementById('stat-route-pts').textContent=sessionPoints.length;
             drawSessionRoute();
-        }}
+        }
+        document.getElementById('live-panel').innerHTML=
+            '<div class="live-grid">'+
+                '<div class="live-field"><div class="lbl">Timestamp</div><div class="val" style="font-size:0.75rem">'+data.timestamp+'</div></div>'+
+                '<div class="live-field"><div class="lbl">Dispositivo</div><div class="val" style="font-size:0.82rem">'+data.device+'</div></div>'+
+            '</div>'+
+            '<div class="live-grid" style="margin-top:4px">'+
+                '<div class="live-field"><div class="lbl">Latitud</div><div class="val">'+lat.toFixed(6)+'</div></div>'+
+                '<div class="live-field"><div class="lbl">Longitud</div><div class="val">'+lon.toFixed(6)+'</div></div>'+
+            '</div>';
+        document.getElementById('route-info').innerHTML=
+            '<div class="live-grid">'+
+                '<div class="live-field"><div class="lbl">Puntos trazados</div><div class="val">'+sessionPoints.length+'</div></div>'+
+                '<div class="live-field"><div class="lbl">Inicio sesión</div><div class="val" style="font-size:0.75rem">'+sessionStartTime+'</div></div>'+
+            '</div>'+
+            '<p style="font-size:0.7rem;color:var(--text-muted);margin-top:8px;padding:0 4px">La ruta se reinicia al recargar la página.</p>';
+    }).catch(function(){});
+}
 
-        // Panel live
-        document.getElementById('live-panel').innerHTML = `
-            <div class="live-grid">
-                <div class="live-field">
-                    <div class="lbl">Timestamp</div>
-                    <div class="val" style="font-size:0.78rem">${{data.timestamp}}</div>
-                </div>
-                <div class="live-field">
-                    <div class="lbl">Dispositivo</div>
-                    <div class="val" style="font-size:0.85rem">${{data.device}}</div>
-                </div>
-                <div class="live-field">
-                    <div class="lbl">Latitud</div>
-                    <div class="val">${{parseFloat(data.lat).toFixed(6)}}</div>
-                </div>
-                <div class="live-field">
-                    <div class="lbl">Longitud</div>
-                    <div class="val">${{parseFloat(data.lon).toFixed(6)}}</div>
-                </div>
-            </div>
-        `;
-
-        // Info ruta
-        document.getElementById('route-info').innerHTML = `
-            <div class="live-grid">
-                <div class="live-field">
-                    <div class="lbl">Puntos trazados</div>
-                    <div class="val">${{sessionPoints.length}}</div>
-                </div>
-                <div class="live-field">
-                    <div class="lbl">Inicio sesión</div>
-                    <div class="val" style="font-size:0.72rem">${{sessionStartTime}}</div>
-                </div>
-            </div>
-            <p style="font-size:0.72rem; color:var(--text-faint); margin-top:8px;">
-                La ruta se reinicia al recargar la página
-            </p>
-        `;
-    }}).catch(() => {{}});
-}}
-
-var sessionStartTime = new Date().toLocaleTimeString('es-CO');
-
-function drawSessionRoute() {{
-    if (sessionPoints.length < 2) return;
-    // Limitar a 25 puntos para OSRM
-    var pts = sessionPoints.length > 25
-        ? sessionPoints.filter((_, i) => i % Math.ceil(sessionPoints.length / 25) === 0)
-        : sessionPoints;
-    var coords = pts.map(p => p[1] + ',' + p[0]).join(';');
-    fetch('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson')
-        .then(r => r.json())
-        .then(osrm => {{
-            if (osrm.code !== 'Ok') {{
-                // Fallback: línea recta
-                if (routeLineRT) mapRT.removeLayer(routeLineRT);
-                routeLineRT = L.polyline(sessionPoints, {{color:'#e879a0', weight:3, opacity:0.7}}).addTo(mapRT);
+function drawSessionRoute(){
+    if(sessionPoints.length<2) return;
+    var pts=sessionPoints;
+    if(pts.length>25){
+        var step=Math.ceil(pts.length/23);
+        var sampled=[pts[0]];
+        for(var i=step;i<pts.length-1;i+=step) sampled.push(pts[i]);
+        sampled.push(pts[pts.length-1]);
+        pts=sampled;
+    }
+    var coords=pts.map(function(p){return p[1]+','+p[0]}).join(';');
+    fetch('https://router.project-osrm.org/route/v1/driving/'+coords+'?overview=full&geometries=geojson')
+        .then(function(r){return r.json()})
+        .then(function(osrm){
+            if(osrm.code!=='Ok'){
+                if(routeLineRT) mapRT.removeLayer(routeLineRT);
+                routeLineRT=L.polyline(sessionPoints,{color:'#4dabf7',weight:3,opacity:0.7}).addTo(mapRT);
                 return;
-            }}
-            var rc = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-            if (routeLineRT) mapRT.removeLayer(routeLineRT);
-            routeLineRT = L.polyline(rc, {{color:'#e879a0', weight:4, opacity:0.85}}).addTo(mapRT);
-        }}).catch(() => {{
-            if (routeLineRT) mapRT.removeLayer(routeLineRT);
-            routeLineRT = L.polyline(sessionPoints, {{color:'#e879a0', weight:3, opacity:0.7}}).addTo(mapRT);
-        }});
-}}
+            }
+            var rc=osrm.routes[0].geometry.coordinates.map(function(c){return [c[1],c[0]]});
+            if(routeLineRT) mapRT.removeLayer(routeLineRT);
+            routeLineRT=L.polyline(rc,{color:'#4dabf7',weight:3.5,opacity:0.85}).addTo(mapRT);
+        }).catch(function(){
+            if(routeLineRT) mapRT.removeLayer(routeLineRT);
+            routeLineRT=L.polyline(sessionPoints,{color:'#4dabf7',weight:3,opacity:0.7}).addTo(mapRT);
+        });
+}
 
-// =============================================
-// STATS
-// =============================================
-function fetchStats() {{
-    fetch('/api/stats').then(r => r.json()).then(data => {{
-        document.getElementById('stat-total').textContent = (data.total_records || 0).toLocaleString();
-        document.getElementById('stat-first').textContent = data.first_record
-            ? data.first_record.substring(0,16)
-            : '—';
-        document.getElementById('stat-last').textContent = data.last_record
-            ? data.last_record.substring(0,16)
-            : '—';
-    }}).catch(() => {{}});
-}}
+function fetchStats(){
+    fetch('/api/stats').then(function(r){return r.json()}).then(function(data){
+        document.getElementById('stat-total').textContent=(data.total_records||0).toLocaleString();
+        document.getElementById('stat-first').textContent=data.first_record?data.first_record.substring(0,16):'—';
+        document.getElementById('stat-last').textContent=data.last_record?data.last_record.substring(0,16):'—';
+    }).catch(function(){});
+}
 
-// =============================================
-// HISTÓRICO — QUERY
-// =============================================
-function applyQuickRange(val) {{
-    if (!val) return;
-    var now = new Date();
+function applyQuickRange(val){
+    if(!val) return;
+    var now=new Date();
     var start;
-    if (val === '30m')       start = new Date(now - 30*60*1000);
-    else if (val === '1h')   start = new Date(now - 60*60*1000);
-    else if (val === '3h')   start = new Date(now - 3*60*60*1000);
-    else if (val === '6h')   start = new Date(now - 6*60*60*1000);
-    else if (val === 'today') {{
-        start = new Date(now); start.setHours(0,0,0,0);
-    }}
-    else if (val === 'yesterday') {{
-        start = new Date(now); start.setDate(start.getDate()-1); start.setHours(0,0,0,0);
-        now   = new Date(start); now.setHours(23,59,59,999);
-    }}
-    else if (val === 'week') {{
-        start = new Date(now); start.setDate(start.getDate()-7);
-    }}
-    currentRange.start = toLocalISO(start);
-    currentRange.end   = toLocalISO(val === 'yesterday' ? now : new Date());
-}}
+    if(val==='30m') start=new Date(now-30*60*1000);
+    else if(val==='1h') start=new Date(now-60*60*1000);
+    else if(val==='3h') start=new Date(now-3*60*60*1000);
+    else if(val==='6h') start=new Date(now-6*60*60*1000);
+    else if(val==='today'){start=new Date(now);start.setHours(0,0,0,0);}
+    else if(val==='yesterday'){
+        start=new Date(now);start.setDate(start.getDate()-1);start.setHours(0,0,0,0);
+        now=new Date(start);now.setHours(23,59,59,999);
+    }
+    else if(val==='week'){start=new Date(now);start.setDate(start.getDate()-7);}
+    currentRange.start=toLocalISO(start);
+    currentRange.end=toLocalISO(val==='yesterday'?now:new Date());
+}
 
-function toLocalISO(d) {{
-    var pad = n => String(n).padStart(2,'0');
-    return `${{d.getFullYear()}}-${{pad(d.getMonth()+1)}}-${{pad(d.getDate())}}T${{pad(d.getHours())}}:${{pad(d.getMinutes())}}:${{pad(d.getSeconds())}}`;
-}}
+function toLocalISO(d){
+    var pad=function(n){return String(n).padStart(2,'0')};
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
 
-function runHistoricQuery() {{
-    if (!currentRange.start || !currentRange.end) {{
+function runHistoricQuery(){
+    if(!currentRange.start||!currentRange.end){
         showToast('Selecciona un rango de tiempo primero');
         return;
-    }}
-    var status = document.getElementById('hist-status');
-    status.textContent = 'Buscando...';
-    document.getElementById('results-list').innerHTML = '<p class="no-data">Cargando...</p>';
-    document.getElementById('results-count').textContent = '—';
-
-    var url = `/api/history-range?start=${{encodeURIComponent(currentRange.start)}}&end=${{encodeURIComponent(currentRange.end)}}`;
-    fetch(url).then(r => r.json()).then(data => {{
-        status.textContent = '';
-        if (!data || data.length === 0) {{
-            document.getElementById('results-list').innerHTML = '<p class="no-data">Sin registros en ese período</p>';
-            document.getElementById('results-count').textContent = '0';
+    }
+    var status=document.getElementById('hist-status');
+    status.textContent='Buscando...';
+    status.style.color='var(--blue-bright)';
+    document.getElementById('results-list').innerHTML=
+        '<div class="no-data"><div class="skeleton" style="width:60%;height:12px;margin:8px auto"></div><div class="skeleton" style="width:40%;height:12px;margin:8px auto"></div></div>';
+    document.getElementById('results-count').textContent='...';
+    var url='/api/history-range?start='+encodeURIComponent(currentRange.start)+'&end='+encodeURIComponent(currentRange.end);
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+        status.textContent='';
+        if(!data||data.length===0){
+            document.getElementById('results-list').innerHTML=
+                '<div class="no-data"><div class="no-data-icon">📭</div>Sin registros en ese período</div>';
+            document.getElementById('results-count').textContent='0';
             return;
-        }}
+        }
         renderHistoricResults(data);
         drawHistoricRoute(data);
         saveToCache(data);
-    }}).catch(err => {{
-        status.textContent = 'Error al buscar';
+    }).catch(function(){
+        status.textContent='Error';
+        status.style.color='#ff6b6b';
         showToast('Error al consultar la base de datos');
-    }});
-}}
+    });
+}
 
-function renderHistoricResults(data) {{
-    document.getElementById('results-count').textContent = data.length + ' registros';
-    var html = data.slice().reverse().map((r, i) => `
-        <div class="result-item" onclick="flyToPoint(${{r.lat}}, ${{r.lon}})">
-            <div class="result-dot"></div>
-            <div>
-                <div class="result-coords">${{parseFloat(r.lat).toFixed(5)}}, ${{parseFloat(r.lon).toFixed(5)}}</div>
-                <div class="result-device">${{r.device}}</div>
-            </div>
-            <div class="result-time">${{r.timestamp.substring(11,16)}}</div>
-        </div>
-    `).join('');
-    document.getElementById('results-list').innerHTML = html;
-}}
+function renderHistoricResults(data){
+    document.getElementById('results-count').textContent=data.length+' reg.';
+    var reversed=data.slice().reverse();
+    var html=reversed.map(function(r,i){
+        return '<div class="result-item" onclick="flyToPoint('+r.lat+','+r.lon+')">'+
+            '<div class="result-index">'+(data.length-i)+'</div>'+
+            '<div class="result-info">'+
+                '<div class="result-coords">'+parseFloat(r.lat).toFixed(5)+', '+parseFloat(r.lon).toFixed(5)+'</div>'+
+                '<div class="result-device">'+r.device+'</div>'+
+            '</div>'+
+            '<div class="result-time">'+r.timestamp.substring(11,16)+'</div>'+
+        '</div>';
+    }).join('');
+    document.getElementById('results-list').innerHTML=html;
+}
 
-function flyToPoint(lat, lon) {{
-    mapHist.flyTo([lat, lon], 16, {{duration: 0.8}});
-}}
+function flyToPoint(lat,lon){mapHist.flyTo([lat,lon],16,{duration:0.6});}
 
-function drawHistoricRoute(data) {{
-    // Limpiar marcadores anteriores
-    histMarkers.forEach(m => mapHist.removeLayer(m));
-    histMarkers = [];
-    if (routeLineHist) {{ mapHist.removeLayer(routeLineHist); routeLineHist = null; }}
+function drawHistoricRoute(data){
+    histMarkers.forEach(function(m){mapHist.removeLayer(m)});
+    histMarkers=[];
+    if(routeLineHist){mapHist.removeLayer(routeLineHist);routeLineHist=null;}
+    if(data.length===0) return;
 
-    if (data.length === 0) return;
+    var first=data[0];
+    var last=data[data.length-1];
+    var startIcon=L.divIcon({html:'<span style="font-size:18px">🟢</span>',iconSize:[22,22],className:''});
+    var endIcon=L.divIcon({html:'<span style="font-size:18px">🔴</span>',iconSize:[22,22],className:''});
+    histMarkers.push(L.marker([first.lat,first.lon],{icon:startIcon}).addTo(mapHist).bindPopup('<b>Inicio</b><br>'+first.timestamp.substring(0,16)));
+    if(data.length>1){
+        histMarkers.push(L.marker([last.lat,last.lon],{icon:endIcon}).addTo(mapHist).bindPopup('<b>Fin</b><br>'+last.timestamp.substring(0,16)));
+    }
 
-    // Marcador inicio y fin
-    var first = data[0];
-    var last  = data[data.length - 1];
-    var startIcon = L.divIcon({{html:'<span style="font-size:20px">🟢</span>', iconSize:[24,24], className:''}});
-    var endIcon   = L.divIcon({{html:'<span style="font-size:20px">🔴</span>', iconSize:[24,24], className:''}});
-    histMarkers.push(L.marker([first.lat, first.lon], {{icon: startIcon}}).addTo(mapHist).bindPopup('Inicio: ' + first.timestamp.substring(0,16)));
-    if (data.length > 1) {{
-        histMarkers.push(L.marker([last.lat, last.lon], {{icon: endIcon}}).addTo(mapHist).bindPopup('Fin: ' + last.timestamp.substring(0,16)));
-    }}
+    var points=data.map(function(r){return [parseFloat(r.lat),parseFloat(r.lon)]});
 
-    // Dibujar ruta con OSRM (máx 25 puntos)
-    var points = data.map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
-    var sample = points.length > 25
-        ? points.filter((_, i) => i % Math.ceil(points.length / 25) === 0)
-        : points;
+    // OSRM sampling — ALWAYS include first AND last point
+    var sample;
+    if(points.length>25){
+        var step=Math.ceil(points.length/23);
+        sample=[points[0]];
+        for(var i=step;i<points.length-1;i+=step) sample.push(points[i]);
+        sample.push(points[points.length-1]);
+    }else{
+        sample=points;
+    }
 
-    var coords = sample.map(p => p[1] + ',' + p[0]).join(';');
-    fetch('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson')
-        .then(r => r.json())
-        .then(osrm => {{
-            if (osrm.code !== 'Ok') throw new Error('OSRM error');
-            var rc = osrm.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-            routeLineHist = L.polyline(rc, {{color:'#b06ef3', weight:4, opacity:0.85}}).addTo(mapHist);
-            mapHist.fitBounds(routeLineHist.getBounds(), {{padding:[30,30]}});
-        }}).catch(() => {{
-            routeLineHist = L.polyline(points, {{color:'#b06ef3', weight:3, opacity:0.7}}).addTo(mapHist);
-            mapHist.fitBounds(routeLineHist.getBounds(), {{padding:[30,30]}});
-        }});
-}}
+    var coords=sample.map(function(p){return p[1]+','+p[0]}).join(';');
+    fetch('https://router.project-osrm.org/route/v1/driving/'+coords+'?overview=full&geometries=geojson')
+        .then(function(r){return r.json()})
+        .then(function(osrm){
+            if(osrm.code!=='Ok') throw new Error('OSRM error');
+            var rc=osrm.routes[0].geometry.coordinates.map(function(c){return [c[1],c[0]]});
+            routeLineHist=L.polyline(rc,{color:'#748ffc',weight:3.5,opacity:0.85}).addTo(mapHist);
+            mapHist.fitBounds(routeLineHist.getBounds(),{padding:[30,30]});
+        }).catch(function(){
+            routeLineHist=L.polyline(points,{color:'#748ffc',weight:3,opacity:0.7}).addTo(mapHist);
+            mapHist.fitBounds(routeLineHist.getBounds(),{padding:[30,30]});
+        });
+}
 
-function clearHistoric() {{
-    histMarkers.forEach(m => mapHist.removeLayer(m));
-    histMarkers = [];
-    if (routeLineHist) {{ mapHist.removeLayer(routeLineHist); routeLineHist = null; }}
-    document.getElementById('results-list').innerHTML = '<p class="no-data">Selecciona un rango y presiona Buscar</p>';
-    document.getElementById('results-count').textContent = '—';
-    document.getElementById('hist-status').textContent = '';
-    document.getElementById('quick-select').value = '';
-    currentRange = {{ start: null, end: null }};
-}}
+function clearHistoric(){
+    histMarkers.forEach(function(m){mapHist.removeLayer(m)});
+    histMarkers=[];
+    if(routeLineHist){mapHist.removeLayer(routeLineHist);routeLineHist=null;}
+    document.getElementById('results-list').innerHTML=
+        '<div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>';
+    document.getElementById('results-count').textContent='—';
+    document.getElementById('hist-status').textContent='';
+    document.getElementById('quick-select').value='';
+    currentRange={start:null,end:null};
+}
 
-// =============================================
-// MODAL
-// =============================================
-function openModal() {{
-    var now = new Date();
-    var oneHourAgo = new Date(now - 60*60*1000);
-    document.getElementById('modal-start').value = toLocalISO(oneHourAgo);
-    document.getElementById('modal-end').value   = toLocalISO(now);
+function openModal(){
+    var now=new Date();
+    var oneHourAgo=new Date(now-60*60*1000);
+    document.getElementById('modal-start').value=toLocalISO(oneHourAgo);
+    document.getElementById('modal-end').value=toLocalISO(now);
     document.getElementById('modal-overlay').classList.add('open');
-}}
-function closeModal() {{
+    document.body.style.overflow='hidden';
+}
+function closeModal(){
     document.getElementById('modal-overlay').classList.remove('open');
-}}
-function closeModalOutside(e) {{
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
-}}
-function setQuick(val) {{
+    document.body.style.overflow='';
+}
+function closeModalOutside(e){
+    if(e.target===document.getElementById('modal-overlay')) closeModal();
+}
+function setQuick(val){
     applyQuickRange(val);
-    document.getElementById('modal-start').value = currentRange.start;
-    document.getElementById('modal-end').value   = currentRange.end;
-}}
-function applyModal() {{
-    currentRange.start = document.getElementById('modal-start').value;
-    currentRange.end   = document.getElementById('modal-end').value;
+    document.getElementById('modal-start').value=currentRange.start;
+    document.getElementById('modal-end').value=currentRange.end;
+}
+function applyModal(){
+    currentRange.start=document.getElementById('modal-start').value;
+    currentRange.end=document.getElementById('modal-end').value;
     closeModal();
     runHistoricQuery();
-}}
+}
 
-// =============================================
-// CACHE localStorage
-// =============================================
-function saveToCache(data) {{
-    try {{
-        var toSave = data.slice(-CACHE_PTS);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({{
-            savedAt: new Date().toISOString(),
-            points:  toSave
-        }}));
-    }} catch(e) {{}}
-}}
+function saveToCache(data){
+    try{
+        localStorage.setItem(CACHE_KEY,JSON.stringify({
+            savedAt:new Date().toISOString(),
+            points:data.slice(-CACHE_PTS)
+        }));
+    }catch(e){}
+}
 
-function loadCachedRoute() {{
-    try {{
-        var raw = localStorage.getItem(CACHE_KEY);
-        if (!raw) return;
-        var cache = JSON.parse(raw);
-        if (!cache.points || cache.points.length < 2) return;
-        var points = cache.points.map(r => [parseFloat(r.lat), parseFloat(r.lon)]);
-        var cachedLine = L.polyline(points, {{
-            color: '#b06ef3',
-            weight: 2,
-            opacity: 0.35,
-            dashArray: '6 4'
-        }}).addTo(mapHist);
-        mapHist.fitBounds(cachedLine.getBounds(), {{padding:[40,40]}});
+function loadCachedRoute(){
+    try{
+        var raw=localStorage.getItem(CACHE_KEY);
+        if(!raw) return;
+        var cache=JSON.parse(raw);
+        if(!cache.points||cache.points.length<2) return;
+        var points=cache.points.map(function(r){return [parseFloat(r.lat),parseFloat(r.lon)]});
+        var cachedLine=L.polyline(points,{color:'#748ffc',weight:2,opacity:0.3,dashArray:'6 4'}).addTo(mapHist);
+        mapHist.fitBounds(cachedLine.getBounds(),{padding:[40,40]});
+        var savedAt=new Date(cache.savedAt).toLocaleString('es-CO');
+        document.getElementById('results-list').innerHTML=
+            '<div class="no-data" style="padding:16px;font-size:0.78rem">'+
+                '<div class="no-data-icon">📦</div>'+
+                'Última búsqueda del caché<br>'+
+                '<span style="color:var(--text-muted);font-size:0.72rem">'+savedAt+'</span><br><br>'+
+                '<span style="color:var(--text-muted)">Haz una nueva búsqueda para actualizar</span>'+
+            '</div>';
+        document.getElementById('results-count').textContent=cache.points.length+' (caché)';
+    }catch(e){}
+}
 
-        // Mostrar aviso en lista
-        var savedAt = new Date(cache.savedAt).toLocaleString('es-CO');
-        document.getElementById('results-list').innerHTML = `
-            <p class="no-data" style="padding:16px; font-size:0.78rem;">
-                📦 Última búsqueda cargada del caché<br>
-                <span style="color:var(--text-faint)">${{savedAt}}</span><br><br>
-                Haz una nueva búsqueda para actualizar.
-            </p>
-        `;
-        document.getElementById('results-count').textContent = cache.points.length + ' (caché)';
-    }} catch(e) {{}}
-}}
-
-// =============================================
-// TOAST
-// =============================================
-function showToast(msg) {{
-    var t = document.getElementById('toast');
-    t.textContent = msg;
+function showToast(msg){
+    var t=document.getElementById('toast');
+    t.innerHTML=msg;
     t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
-}}
+    setTimeout(function(){t.classList.remove('show')},3000);
+}
 
-// =============================================
-// LOOP PRINCIPAL
-// =============================================
-function updateRT() {{
-    fetchLatest();
-    fetchStats();
-}}
+function updateRT(){fetchLatest();fetchStats();}
 
-// INIT
 initMaps();
 updateRT();
-setInterval(updateRT, 2000);
+setInterval(updateRT,2000);
 </script>
 </body>
 </html>"""
