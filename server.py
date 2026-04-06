@@ -9,9 +9,13 @@ import socket
 import ssl
 import threading
 
-# Load .env file before importing app
-from dotenv import load_dotenv
-load_dotenv()
+# Load .env file if python-dotenv is available (local dev convenience).
+# On EC2, start.sh already exports vars via 'source ~/.env', so this is optional.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # Not installed — env vars already loaded by start.sh
 
 from app import create_app
 from app.config import Config
