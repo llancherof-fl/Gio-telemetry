@@ -36,10 +36,14 @@ git fetch origin
 git reset --hard origin/main
 echo "[GIT] Codigo actualizado a la ultima version de main"
 
-# 4. Instalar dependencias (solo si requirements.txt cambio)
+# 4. Instalar dependencias
 if [ -f requirements.txt ]; then
-    pip3 install -q -r requirements.txt 2>/dev/null || pip install -q -r requirements.txt 2>/dev/null || true
-    echo "[PIP] Dependencias instaladas"
+    echo "[PIP] Instalando dependencias..."
+    pip3 install --user -q -r requirements.txt 2>&1 || \
+    pip install --user -q -r requirements.txt 2>&1 || \
+    sudo pip3 install -q -r requirements.txt 2>&1 || \
+    echo "[WARN] No se pudieron instalar algunas dependencias (puede funcionar igual)"
+    echo "[PIP] Dependencias procesadas"
 fi
 
 # 5. Copiar .env al directorio del proyecto (para python-dotenv)
