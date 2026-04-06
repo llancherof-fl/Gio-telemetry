@@ -2,7 +2,6 @@ import socket
 import json
 import psycopg2
 import psycopg2.extras
-import psycopg2.pool
 import threading
 import datetime
 import os
@@ -38,10 +37,11 @@ app = Flask(__name__)
 # ==========================================
 # DATABASE
 # ==========================================
-db_pool = None
+def get_db():
+    return psycopg2.connect(**DB_CONFIG)
 
 def init_db():
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = get_db()
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS coordinates (
@@ -53,81 +53,61 @@ def init_db():
             raw_ts    BIGINT
         )
     ''')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_ts ON coordinates(timestamp)')
     conn.commit()
     conn.close()
     print("[DB] Tabla 'coordinates' lista.")
-
-def init_pool():
-    global db_pool
-    db_pool = psycopg2.pool.ThreadedConnectionPool(2, 10, **DB_CONFIG)
-    print("[DB] Pool de conexiones inicializado.")
-
-def get_db():
-    return db_pool.getconn()
-
-def release_db(conn):
-    db_pool.putconn(conn)
 
 def insert_data(lat, lon, device, raw_ts):
     colombia_time = (datetime.datetime.utcfromtimestamp(raw_ts / 1000)
                      - datetime.timedelta(hours=5))
     conn = get_db()
-    try:
-        c = conn.cursor()
-        c.execute(
-            'INSERT INTO coordinates (timestamp, lat, lon, device, raw_ts) VALUES (%s, %s, %s, %s, %s)',
-            (colombia_time, lat, lon, device, raw_ts)
-        )
-        conn.commit()
-    finally:
-        release_db(conn)
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO coordinates (timestamp, lat, lon, device, raw_ts) VALUES (%s, %s, %s, %s, %s)',
+        (colombia_time, lat, lon, device, raw_ts)
+    )
+    conn.commit()
+    conn.close()
 
 def fetch_latest():
     conn = get_db()
-    try:
-        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute('SELECT timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT 1')
-        row = c.fetchone()
-        if row:
-            row = dict(row)
-            row['timestamp'] = str(row['timestamp'])
-            return row
-        return None
-    finally:
-        release_db(conn)
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute('SELECT timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT 1')
+    row = c.fetchone()
+    conn.close()
+    if row:
+        row = dict(row)
+        row['timestamp'] = str(row['timestamp'])
+        return row
+    return None
 
 def fetch_history(limit=HISTORY_LIMIT):
     conn = get_db()
-    try:
-        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute(
-            'SELECT timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT %s',
-            (limit,)
-        )
-        rows = [dict(r) for r in c.fetchall()]
-        for r in rows:
-            r['timestamp'] = str(r['timestamp'])
-        return rows
-    finally:
-        release_db(conn)
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute(
+        'SELECT timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT %s',
+        (limit,)
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    for r in rows:
+        r['timestamp'] = str(r['timestamp'])
+    return rows
 
 def fetch_history_range(start_ts, end_ts, limit=500):
     conn = get_db()
-    try:
-        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute(
-            '''SELECT timestamp, lat, lon, device FROM coordinates
-               WHERE timestamp >= %s AND timestamp <= %s
-               ORDER BY timestamp ASC LIMIT %s''',
-            (start_ts, end_ts, limit)
-        )
-        rows = [dict(r) for r in c.fetchall()]
-        for r in rows:
-            r['timestamp'] = str(r['timestamp'])
-        return rows
-    finally:
-        release_db(conn)
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute(
+        '''SELECT timestamp, lat, lon, device FROM coordinates
+           WHERE timestamp >= %s AND timestamp <= %s
+           ORDER BY timestamp ASC LIMIT %s''',
+        (start_ts, end_ts, limit)
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    for r in rows:
+        r['timestamp'] = str(r['timestamp'])
+    return rows
 
 # ==========================================
 # API ENDPOINTS
@@ -191,19 +171,17 @@ def api_history_range():
 @app.route('/api/stats')
 def api_stats():
     conn = get_db()
-    try:
-        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute('SELECT COUNT(*) as total FROM coordinates')
-        total = c.fetchone()['total']
-        c.execute('SELECT MIN(timestamp) as first_ts, MAX(timestamp) as last_ts FROM coordinates')
-        row = dict(c.fetchone())
-        return jsonify({
-            'total_records': total,
-            'first_record':  str(row['first_ts']) if row['first_ts'] else None,
-            'last_record':   str(row['last_ts'])  if row['last_ts']  else None
-        })
-    finally:
-        release_db(conn)
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute('SELECT COUNT(*) as total FROM coordinates')
+    total = c.fetchone()['total']
+    c.execute('SELECT MIN(timestamp) as first_ts, MAX(timestamp) as last_ts FROM coordinates')
+    row = dict(c.fetchone())
+    conn.close()
+    return jsonify({
+        'total_records': total,
+        'first_record':  str(row['first_ts']) if row['first_ts'] else None,
+        'last_record':   str(row['last_ts'])  if row['last_ts']  else None
+    })
 
 # ==========================================
 # WEB DASHBOARD
@@ -647,7 +625,7 @@ def index():
 
 <nav>
     <div class="nav-brand">
-        <span class="brand-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.7 4.3a10 10 0 0 1 0 15.4"/><path d="M4.3 19.7a10 10 0 0 1 0-15.4"/><path d="M16.2 7.8a5.5 5.5 0 0 1 0 8.4"/><path d="M7.8 16.2a5.5 5.5 0 0 1 0-8.4"/></svg></span>
+        <span class="brand-icon">📡</span>
         GIO <span class="brand-sub">TELEMETRY</span>
     </div>
     <div class="nav-tabs">
@@ -655,7 +633,7 @@ def index():
             <div class="dot-live"></div> Tiempo Real
         </button>
         <button class="nav-tab" onclick="switchView('historical')" id="tab-hist">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Histórico
+            📁 Histórico
         </button>
     </div>
     <div class="nav-meta">""" + EC2_NAME + """</div>
@@ -695,7 +673,7 @@ def index():
                 Última Posición
             </div>
             <div class="live-panel" id="live-panel">
-                <div class="no-data"><div class="no-data-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-muted)"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg></div>Cargando última posición...</div>
+                <div class="no-data"><div class="no-data-icon">📍</div>Cargando última posición...</div>
             </div>
         </div>
         <div class="card">
@@ -704,7 +682,7 @@ def index():
                 Recorrido de esta sesión
             </div>
             <div class="live-panel" id="route-info">
-                <div class="no-data"><div class="no-data-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><path d="M3 22L8.5 2"/><path d="M15.5 2L21 22"/><line x1="12" y1="5" x2="12" y2="8"/><line x1="12" y1="11" x2="12" y2="14"/><line x1="12" y1="17" x2="12" y2="20"/></svg></div>La polilínea se construye desde que abriste la página</div>
+                <div class="no-data"><div class="no-data-icon">🛣️</div>La polilínea se construye desde que abriste la página</div>
             </div>
         </div>
     </div>
@@ -723,7 +701,7 @@ def index():
             <option value="yesterday">Ayer</option>
             <option value="week">Esta semana</option>
         </select>
-        <button class="btn btn-outline" onclick="openModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Personalizado</button>
+        <button class="btn btn-outline" onclick="openModal()">📅 Personalizado</button>
         <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
         <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>
         <span id="hist-status" style="font-size:0.75rem;color:var(--text-muted);margin-left:2px;"></span>
@@ -742,7 +720,7 @@ def index():
                 <span class="results-count" id="results-count">&mdash;</span>
             </div>
             <div class="results-list" id="results-list">
-                <div class="no-data"><div class="no-data-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>Selecciona un rango y presiona Buscar</div>
+                <div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>
             </div>
         </div>
     </div>
@@ -751,7 +729,7 @@ def index():
 <!-- MODAL -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
     <div class="modal" onclick="event.stopPropagation()">
-        <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Rango personalizado</h3>
+        <h3>📅 Rango personalizado</h3>
         <div class="quick-ranges">
             <button class="quick-btn" onclick="setQuick('30m')">30 min</button>
             <button class="quick-btn" onclick="setQuick('1h')">1 hora</button>
@@ -791,19 +769,6 @@ var currentRange={start:null,end:null};
 var CACHE_KEY='gio_hist_cache';
 var CACHE_PTS=20;
 var sessionStartTime=new Date().toLocaleTimeString('es-CO');
-
-var osrmState={
-    inFlight:false,
-    timer:null,
-    cachedRoute:null,
-    DEBOUNCE:5000
-};
-
-var SVG_PIN_GREEN='<svg width="28" height="36" viewBox="0 0 28 36" fill="none"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#51cf66"/><circle cx="14" cy="13" r="5" fill="#0a0e1a" opacity="0.25"/><circle cx="14" cy="13" r="4" fill="white" opacity="0.9"/></svg>';
-var SVG_PIN_RED='<svg width="28" height="36" viewBox="0 0 28 36" fill="none"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#ff6b6b"/><circle cx="14" cy="13" r="5" fill="#0a0e1a" opacity="0.25"/><circle cx="14" cy="13" r="4" fill="white" opacity="0.9"/></svg>';
-var SVG_SEARCH='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-var SVG_INBOX='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
-var SVG_PACKAGE='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
 
 function initMaps(){
     // CLASSIC WHITE OpenStreetMap — no filters
@@ -912,14 +877,15 @@ function executeSessionOSRM(){
         pts=sampled;
     }
     var coords=pts.map(function(p){return p[1]+','+p[0]}).join(';');
-    osrmState.inFlight=true;
     fetch('https://router.project-osrm.org/route/v1/driving/'+coords+'?overview=full&geometries=geojson')
         .then(function(r){return r.json()})
         .then(function(osrm){
-            osrmState.inFlight=false;
-            if(osrm.code!=='Ok') throw new Error();
+            if(osrm.code!=='Ok'){
+                if(routeLineRT) mapRT.removeLayer(routeLineRT);
+                routeLineRT=L.polyline(sessionPoints,{color:'#4dabf7',weight:3,opacity:0.7}).addTo(mapRT);
+                return;
+            }
             var rc=osrm.routes[0].geometry.coordinates.map(function(c){return [c[1],c[0]]});
-            osrmState.cachedRoute=rc;
             if(routeLineRT) mapRT.removeLayer(routeLineRT);
             routeLineRT=L.polyline(rc,{color:'#4dabf7',weight:3.5,opacity:0.85}).addTo(mapRT);
         }).catch(function(){
@@ -974,7 +940,7 @@ function runHistoricQuery(){
         status.textContent='';
         if(!data||data.length===0){
             document.getElementById('results-list').innerHTML=
-                '<div class="no-data"><div class="no-data-icon">'+SVG_INBOX+'</div>Sin registros en ese período</div>';
+                '<div class="no-data"><div class="no-data-icon">📭</div>Sin registros en ese período</div>';
             document.getElementById('results-count').textContent='0';
             return;
         }
@@ -1014,8 +980,8 @@ function drawHistoricRoute(data){
 
     var first=data[0];
     var last=data[data.length-1];
-    var startIcon=L.divIcon({html:SVG_PIN_GREEN,iconSize:[28,36],iconAnchor:[14,36],popupAnchor:[0,-36],className:''});
-    var endIcon=L.divIcon({html:SVG_PIN_RED,iconSize:[28,36],iconAnchor:[14,36],popupAnchor:[0,-36],className:''});
+    var startIcon=L.divIcon({html:'<span style="font-size:18px">🟢</span>',iconSize:[22,22],className:''});
+    var endIcon=L.divIcon({html:'<span style="font-size:18px">🔴</span>',iconSize:[22,22],className:''});
     histMarkers.push(L.marker([first.lat,first.lon],{icon:startIcon}).addTo(mapHist).bindPopup('<b>Inicio</b><br>'+first.timestamp.substring(0,16)));
     if(data.length>1){
         histMarkers.push(L.marker([last.lat,last.lon],{icon:endIcon}).addTo(mapHist).bindPopup('<b>Fin</b><br>'+last.timestamp.substring(0,16)));
@@ -1063,7 +1029,7 @@ function clearHistoric(){
     histMarkers=[];
     if(routeLineHist){mapHist.removeLayer(routeLineHist);routeLineHist=null;}
     document.getElementById('results-list').innerHTML=
-        '<div class="no-data"><div class="no-data-icon">'+SVG_SEARCH+'</div>Selecciona un rango y presiona Buscar</div>';
+        '<div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>';
     document.getElementById('results-count').textContent='—';
     document.getElementById('hist-status').textContent='';
     document.getElementById('quick-select').value='';
@@ -1118,7 +1084,7 @@ function loadCachedRoute(){
         var savedAt=new Date(cache.savedAt).toLocaleString('es-CO');
         document.getElementById('results-list').innerHTML=
             '<div class="no-data" style="padding:16px;font-size:0.78rem">'+
-                '<div class="no-data-icon">'+SVG_PACKAGE+'</div>'+
+                '<div class="no-data-icon">📦</div>'+
                 'Última búsqueda del caché<br>'+
                 '<span style="color:var(--text-muted);font-size:0.72rem">'+savedAt+'</span><br><br>'+
                 '<span style="color:var(--text-muted)">Haz una nueva búsqueda para actualizar</span>'+
@@ -1174,7 +1140,6 @@ if __name__ == '__main__':
     print("[*] Verificando conexion a base de datos...")
     try:
         init_db()
-        init_pool()
     except Exception as e:
         print(f"[ERROR] No se pudo conectar a la BD: {e}")
         print("[!] Revisa tus variables de entorno DB_HOST, DB_USER, DB_PASSWORD, DB_NAME")
