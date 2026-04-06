@@ -849,6 +849,25 @@ function fetchLatest(){
 
 function drawSessionRoute(){
     if(sessionPoints.length<2) return;
+    drawInterimRoute();
+    if(osrmState.timer) clearTimeout(osrmState.timer);
+    osrmState.timer=setTimeout(executeSessionOSRM,osrmState.DEBOUNCE);
+}
+
+function drawInterimRoute(){
+    if(routeLineRT) mapRT.removeLayer(routeLineRT);
+    if(osrmState.cachedRoute&&osrmState.cachedRoute.length>1){
+        var latest=sessionPoints[sessionPoints.length-1];
+        var combined=osrmState.cachedRoute.concat([latest]);
+        routeLineRT=L.polyline(combined,{color:'#4dabf7',weight:3.5,opacity:0.85}).addTo(mapRT);
+    }else{
+        routeLineRT=L.polyline(sessionPoints,{color:'#4dabf7',weight:3,opacity:0.7}).addTo(mapRT);
+    }
+}
+
+function executeSessionOSRM(){
+    if(osrmState.inFlight) return;
+    if(sessionPoints.length<2) return;
     var pts=sessionPoints;
     if(pts.length>25){
         var step=Math.ceil(pts.length/23);
@@ -870,8 +889,7 @@ function drawSessionRoute(){
             if(routeLineRT) mapRT.removeLayer(routeLineRT);
             routeLineRT=L.polyline(rc,{color:'#4dabf7',weight:3.5,opacity:0.85}).addTo(mapRT);
         }).catch(function(){
-            if(routeLineRT) mapRT.removeLayer(routeLineRT);
-            routeLineRT=L.polyline(sessionPoints,{color:'#4dabf7',weight:3,opacity:0.7}).addTo(mapRT);
+            osrmState.inFlight=false;
         });
 }
 
@@ -971,7 +989,9 @@ function drawHistoricRoute(data){
 
     var points=data.map(function(r){return [parseFloat(r.lat),parseFloat(r.lon)]});
 
-    // OSRM sampling — ALWAYS include first AND last point
+    routeLineHist=L.polyline(points,{color:'#748ffc',weight:3,opacity:0.5,dashArray:'6 4'}).addTo(mapHist);
+    mapHist.fitBounds(routeLineHist.getBounds(),{padding:[30,30]});
+
     var sample;
     if(points.length>25){
         var step=Math.ceil(points.length/23);
@@ -982,17 +1002,25 @@ function drawHistoricRoute(data){
         sample=points;
     }
 
+    var status=document.getElementById('hist-status');
+    status.textContent='Calculando ruta...';
+    status.style.color='var(--blue-bright)';
+
     var coords=sample.map(function(p){return p[1]+','+p[0]}).join(';');
     fetch('https://router.project-osrm.org/route/v1/driving/'+coords+'?overview=full&geometries=geojson')
         .then(function(r){return r.json()})
         .then(function(osrm){
-            if(osrm.code!=='Ok') throw new Error('OSRM error');
+            status.textContent='';
+            if(osrm.code!=='Ok') throw new Error();
             var rc=osrm.routes[0].geometry.coordinates.map(function(c){return [c[1],c[0]]});
+            if(routeLineHist) mapHist.removeLayer(routeLineHist);
             routeLineHist=L.polyline(rc,{color:'#748ffc',weight:3.5,opacity:0.85}).addTo(mapHist);
             mapHist.fitBounds(routeLineHist.getBounds(),{padding:[30,30]});
         }).catch(function(){
-            routeLineHist=L.polyline(points,{color:'#748ffc',weight:3,opacity:0.7}).addTo(mapHist);
-            mapHist.fitBounds(routeLineHist.getBounds(),{padding:[30,30]});
+            status.textContent='';
+            if(routeLineHist){
+                routeLineHist.setStyle({opacity:0.7,dashArray:null});
+            }
         });
 }
 
