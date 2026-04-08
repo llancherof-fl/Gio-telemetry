@@ -115,27 +115,59 @@ def _sanitize_history_rows(rows, max_speed_kmh, min_jump_km):
 
 def _downsample_rows(rows, sample_minutes):
     """
-    Downsample by keeping the latest point per N-minute bucket (per device).
+    Downsample by keeping the latest point per N-minute bucket (per device),
+    while preserving first and last point per device for route consistency.
     This reduces map noise and payload size for historical rendering.
     """
     if sample_minutes < 2 or len(rows) < 3:
         return rows
 
     bucketed = {}
+    first_by_device = {}
+    last_by_device = {}
+
     for row in rows:
-        try:
-            ts = datetime.datetime.fromisoformat(row['timestamp'])
-        except (ValueError, TypeError):
+        device_key = row.get('device', '') or ''
+        if device_key not in first_by_device:
+            first_by_device[device_key] = row
+        last_by_device[device_key] = row
+
+        ts = _parse_ts(row.get('timestamp'))
+        if not ts:
             continue
 
         minute_bucket = (ts.minute // sample_minutes) * sample_minutes
         bucket_ts = ts.replace(minute=minute_bucket, second=0, microsecond=0)
-        device_key = row.get('device', '') or ''
-        bucketed[(device_key, bucket_ts.isoformat())] = row
+        key = (device_key, bucket_ts.isoformat())
+        prev = bucketed.get(key)
+        if not prev:
+            bucketed[key] = row
+            continue
+
+        prev_ts = _parse_ts(prev.get('timestamp'))
+        if not prev_ts or ts >= prev_ts:
+            bucketed[key] = row
 
     sampled = list(bucketed.values())
-    sampled.sort(key=lambda r: r.get('timestamp', ''))
-    return sampled
+    sampled.extend(first_by_device.values())
+    sampled.extend(last_by_device.values())
+
+    deduped = []
+    seen = set()
+    for row in sampled:
+        key = (
+            row.get('device', '') or '',
+            str(row.get('timestamp', '')),
+            row.get('lat'),
+            row.get('lon'),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+
+    deduped.sort(key=lambda r: r.get('timestamp', ''))
+    return deduped
 
 
 # ══════════════════════════════════════════

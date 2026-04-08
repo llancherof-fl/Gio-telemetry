@@ -22,6 +22,10 @@
     --radius-sm: 8px;
     --radius-lg: 18px;
     --shadow: 0 16px 48px rgba(2, 8, 20, 0.42);
+
+    --layout-offset-desktop: 206px;
+    --layout-offset-tablet: 262px;
+    --layout-offset-mobile: 276px;
 }
 
 *, *::before, *::after {
@@ -114,6 +118,18 @@ body {
     white-space: nowrap;
 }
 
+.nav-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-help-btn {
+    padding: 6px 10px;
+    font-size: 0.73rem;
+    flex: 0 0 auto;
+}
+
 .view {
     display: none;
     padding: 14px 18px 18px;
@@ -166,6 +182,10 @@ body {
     margin: 4px 2px 10px;
     color: var(--text-muted);
     font-size: 0.74rem;
+}
+
+.mobile-pane-nav {
+    display: none;
 }
 
 .status-pill {
@@ -231,6 +251,26 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
+}
+
+.sample-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(10, 18, 34, 0.72);
+    padding: 5px 8px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+.sample-custom input {
+    width: 62px;
+    padding: 6px 7px;
+    text-align: center;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.75rem;
 }
 
 .card {
@@ -394,16 +434,30 @@ body {
     grid-template-columns: minmax(0, 1fr) 360px;
     gap: 12px;
     transition: grid-template-columns 0.28s ease;
+    height: min(74vh, calc(100dvh - var(--layout-offset-desktop)));
+    min-height: 520px;
+    max-height: calc(100dvh - var(--layout-offset-desktop));
 }
 
 .hist-map-card {
-    min-height: 72vh;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.hist-map-wrap {
+    flex: 1;
+    height: auto;
+    min-height: 0;
 }
 
 .results-panel {
     display: flex;
     flex-direction: column;
-    min-height: 72vh;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: linear-gradient(180deg, rgba(16, 27, 49, 0.95) 0%, rgba(11, 20, 36, 0.94) 100%);
@@ -459,7 +513,9 @@ body {
 
 .results-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 6px;
 }
 
@@ -678,6 +734,79 @@ input:focus {
     gap: 8px;
 }
 
+.modal-help {
+    width: min(760px, 94vw);
+    max-height: min(82dvh, 760px);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.help-head h3 {
+    margin: 0;
+}
+
+.help-tabs {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.help-tab {
+    border: 1px solid var(--border);
+    background: rgba(9, 18, 34, 0.86);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 6px 11px;
+    font-size: 0.73rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.help-tab.active {
+    border-color: rgba(91, 185, 255, 0.4);
+    background: var(--blue-soft);
+    color: var(--blue-strong);
+}
+
+.help-body {
+    margin-top: 12px;
+    border: 1px solid rgba(54, 79, 131, 0.34);
+    border-radius: var(--radius);
+    background: rgba(7, 14, 26, 0.74);
+    padding: 14px;
+    overflow-y: auto;
+}
+
+.help-section {
+    display: none;
+}
+
+.help-section.active {
+    display: block;
+}
+
+.help-section h4 {
+    color: var(--blue-strong);
+    font-size: 0.83rem;
+    margin-bottom: 8px;
+}
+
+.help-section ul {
+    margin-left: 18px;
+    color: var(--text-secondary);
+    font-size: 0.77rem;
+    line-height: 1.55;
+}
+
 .toast {
     position: fixed;
     right: 20px;
@@ -776,6 +905,9 @@ input:focus {
 
     .hist-layout {
         grid-template-columns: minmax(0, 1fr) 320px;
+        min-height: 460px;
+        height: min(72vh, calc(100dvh - var(--layout-offset-tablet)));
+        max-height: calc(100dvh - var(--layout-offset-tablet));
     }
 }
 
@@ -808,21 +940,30 @@ input:focus {
         grid-template-columns: 1fr;
     }
 
+    .hist-layout,
+    .hist-layout.panel-collapsed {
+        height: auto;
+        min-height: 0;
+        max-height: none;
+    }
+
     .rt-map-card,
     .hist-map-card {
-        min-height: 62vh;
+        min-height: 56vh;
     }
 
     .map-wrap {
-        min-height: 62vh;
+        min-height: 56vh;
     }
 
     .results-panel {
-        min-height: 42vh;
+        min-height: 46vh;
+        max-height: 46vh;
     }
 
     .hist-layout.panel-collapsed .results-panel {
         min-height: 58px;
+        max-height: 58px;
     }
 
     .hist-layout.panel-collapsed .results-header {
@@ -830,6 +971,51 @@ input:focus {
     }
 
     #view-realtime.details-collapsed .rt-detail-cards {
+        display: none;
+    }
+
+    .mobile-pane-nav {
+        display: inline-flex;
+        width: 100%;
+        gap: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 4px;
+        margin-bottom: 10px;
+        background: rgba(11, 19, 35, 0.78);
+    }
+
+    .mobile-pane-btn {
+        flex: 1;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .mobile-pane-btn.active {
+        color: var(--blue-strong);
+        background: var(--blue-soft);
+        border-color: rgba(91, 185, 255, 0.34);
+    }
+
+    #view-realtime.mobile-pane-map .rt-detail-cards {
+        display: none;
+    }
+
+    #view-realtime.mobile-pane-info .rt-map-card {
+        display: none;
+    }
+
+    #view-historical.mobile-pane-map .results-panel {
+        display: none;
+    }
+
+    #view-historical.mobile-pane-info .hist-map-card {
         display: none;
     }
 
@@ -848,6 +1034,11 @@ input:focus {
         justify-content: center;
     }
 
+    .nav-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .top-nav {
         flex-wrap: wrap;
         padding-top: 8px;
@@ -864,8 +1055,34 @@ input:focus {
         justify-content: center;
     }
 
+    .top-nav .btn {
+        flex: 0 0 auto;
+    }
+
     .toolbar-note {
         width: 100%;
+    }
+
+    .sample-custom {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .sample-custom input {
+        width: 80px;
+    }
+
+    .results-panel {
+        min-height: 50vh;
+        max-height: 50vh;
+    }
+
+    .modal-help {
+        max-height: 86dvh;
+    }
+
+    .help-body {
+        max-height: 58dvh;
     }
 
     .toast {

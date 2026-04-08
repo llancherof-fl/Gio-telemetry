@@ -7,7 +7,9 @@ var UI_PREFS_KEY = 'gio_ui_prefs_v3';
 var uiPrefs = {
     activeView: 'realtime',
     realtimeDetailsOpen: true,
-    historicalPanelOpen: true
+    historicalPanelOpen: true,
+    realtimeMobilePane: 'map',
+    historicalMobilePane: 'map'
 };
 
 function loadUIPreferences() {
@@ -41,6 +43,79 @@ function updateHistoricalPanelButton() {
     btn.textContent = uiPrefs.historicalPanelOpen ? 'Ocultar registros' : 'Mostrar registros';
 }
 
+function updateMobilePaneButtons() {
+    var rtMapBtn = document.getElementById('rt-pane-map-btn');
+    var rtInfoBtn = document.getElementById('rt-pane-info-btn');
+    var histMapBtn = document.getElementById('hist-pane-map-btn');
+    var histInfoBtn = document.getElementById('hist-pane-info-btn');
+
+    if (rtMapBtn) rtMapBtn.classList.toggle('active', uiPrefs.realtimeMobilePane !== 'info');
+    if (rtInfoBtn) rtInfoBtn.classList.toggle('active', uiPrefs.realtimeMobilePane === 'info');
+    if (histMapBtn) histMapBtn.classList.toggle('active', uiPrefs.historicalMobilePane !== 'info');
+    if (histInfoBtn) histInfoBtn.classList.toggle('active', uiPrefs.historicalMobilePane === 'info');
+}
+
+function applyMobilePanes() {
+    var rtView = document.getElementById('view-realtime');
+    var histView = document.getElementById('view-historical');
+
+    if (rtView) {
+        rtView.classList.toggle('mobile-pane-map', uiPrefs.realtimeMobilePane !== 'info');
+        rtView.classList.toggle('mobile-pane-info', uiPrefs.realtimeMobilePane === 'info');
+    }
+
+    if (histView) {
+        histView.classList.toggle('mobile-pane-map', uiPrefs.historicalMobilePane !== 'info');
+        histView.classList.toggle('mobile-pane-info', uiPrefs.historicalMobilePane === 'info');
+    }
+
+    updateMobilePaneButtons();
+}
+
+function switchRealtimeMobilePane(pane) {
+    uiPrefs.realtimeMobilePane = pane === 'info' ? 'info' : 'map';
+    applyMobilePanes();
+    saveUIPreferences();
+
+    if (uiPrefs.realtimeMobilePane === 'map' && mapRT) {
+        setTimeout(function() { mapRT.invalidateSize(); }, 140);
+    }
+}
+
+function switchHistoricalMobilePane(pane) {
+    uiPrefs.historicalMobilePane = pane === 'info' ? 'info' : 'map';
+    applyMobilePanes();
+    saveUIPreferences();
+
+    if (uiPrefs.historicalMobilePane === 'map' && mapHist) {
+        setTimeout(function() {
+            mapHist.invalidateSize();
+            if (typeof refreshHistoricLayout === 'function') {
+                refreshHistoricLayout(true);
+            }
+        }, 160);
+    }
+}
+
+function updateLayoutOffsets() {
+    var nav = document.querySelector('.top-nav');
+    var histView = document.getElementById('view-historical');
+    if (!histView) return;
+
+    var toolbar = histView.querySelector('.historical-toolbar');
+    var help = document.getElementById('hist-help');
+
+    var navH = nav ? nav.offsetHeight : 56;
+    var toolbarH = toolbar ? toolbar.offsetHeight : 64;
+    var helpH = help ? help.offsetHeight : 18;
+    if (toolbarH < 20) toolbarH = 64;
+    if (helpH < 8) helpH = 18;
+    var desktopOffset = navH + toolbarH + helpH + 54;
+
+    document.documentElement.style.setProperty('--layout-offset-desktop', desktopOffset + 'px');
+    document.documentElement.style.setProperty('--layout-offset-tablet', (desktopOffset + 22) + 'px');
+}
+
 function applyUIPreferences() {
     var realtimeView = document.getElementById('view-realtime');
     var histLayout = document.getElementById('hist-layout');
@@ -53,8 +128,10 @@ function applyUIPreferences() {
         histLayout.classList.toggle('panel-collapsed', !uiPrefs.historicalPanelOpen);
     }
 
+    applyMobilePanes();
     updateRealtimeDetailsButton();
     updateHistoricalPanelButton();
+    updateLayoutOffsets();
 }
 
 /**
@@ -77,9 +154,16 @@ function switchView(view, skipPersist) {
         saveUIPreferences();
     }
 
+    updateLayoutOffsets();
+
     setTimeout(function() {
         if (view === 'realtime' && mapRT) mapRT.invalidateSize();
-        if (view === 'historical' && mapHist) mapHist.invalidateSize();
+        if (view === 'historical' && mapHist) {
+            mapHist.invalidateSize();
+            if (typeof refreshHistoricLayout === 'function') {
+                refreshHistoricLayout(true);
+            }
+        }
     }, 90);
 }
 
@@ -99,8 +183,48 @@ function toggleHistoricalPanel() {
     saveUIPreferences();
 
     if (mapHist) {
-        setTimeout(function() { mapHist.invalidateSize(); }, 140);
+        setTimeout(function() {
+            mapHist.invalidateSize();
+            if (typeof refreshHistoricLayout === 'function') {
+                refreshHistoricLayout(true);
+            }
+        }, 260);
     }
+}
+
+function openHelpModal(section) {
+    var overlay = document.getElementById('help-overlay');
+    if (!overlay) return;
+    if (section) switchHelpSection(section);
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeHelpModal() {
+    var overlay = document.getElementById('help-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (!document.getElementById('modal-overlay').classList.contains('open')) {
+        document.body.style.overflow = '';
+    }
+}
+
+function closeHelpOutside(e) {
+    if (e.target === document.getElementById('help-overlay')) {
+        closeHelpModal();
+    }
+}
+
+function switchHelpSection(section) {
+    var valid = ['general', 'historical', 'steps', 'mobile'];
+    var safe = valid.indexOf(section) >= 0 ? section : 'general';
+
+    valid.forEach(function(key) {
+        var tab = document.getElementById('help-tab-' + key);
+        var panel = document.getElementById('help-section-' + key);
+        if (tab) tab.classList.toggle('active', key === safe);
+        if (panel) panel.classList.toggle('active', key === safe);
+    });
 }
 
 /**
@@ -132,4 +256,24 @@ function toggleHistoricalPanel() {
 
     // Respect last active view from previous session
     switchView(uiPrefs.activeView || 'realtime', true);
+
+    // Keep layout metrics synced with responsive toolbar/nav wraps
+    window.addEventListener('resize', function() {
+        updateLayoutOffsets();
+        if (mapHist && (uiPrefs.activeView || 'realtime') === 'historical') {
+            mapHist.invalidateSize();
+        }
+    });
+
+    var histLayout = document.getElementById('hist-layout');
+    if (histLayout) {
+        histLayout.addEventListener('transitionend', function(evt) {
+            if (!evt || evt.propertyName.indexOf('grid-template-columns') === -1) return;
+            if (!mapHist) return;
+            mapHist.invalidateSize();
+            if (typeof refreshHistoricLayout === 'function') {
+                refreshHistoricLayout(true);
+            }
+        });
+    }
 })();
