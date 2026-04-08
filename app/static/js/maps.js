@@ -12,11 +12,15 @@ var mapHist = null;
 function initMaps() {
     var tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
     var tileOpts = { attribution: '&copy; OpenStreetMap', maxZoom: 19 };
+    var mapOpts = {
+        preferCanvas: true,
+        zoomControl: true
+    };
 
-    mapRT = L.map('map-rt').setView([10.9878, -74.7889], 13);
+    mapRT = L.map('map-rt', mapOpts).setView([10.9878, -74.7889], 13);
     L.tileLayer(tileUrl, tileOpts).addTo(mapRT);
 
-    mapHist = L.map('map-hist').setView([10.9878, -74.7889], 13);
+    mapHist = L.map('map-hist', mapOpts).setView([10.9878, -74.7889], 13);
     L.tileLayer(tileUrl, tileOpts).addTo(mapHist);
 }
 
@@ -71,14 +75,16 @@ function makeEndIcon() {
  * Returns a promise that resolves with the route geometry or null.
  *
  * @param {Array} points Array of [lat, lon]
+ * @param {Object} options { signal?: AbortSignal }
  * @returns {Promise<Array|null>} Array of [lat, lon] for the smooth route, or null
  */
-function fetchOSRMRoute(points) {
+function fetchOSRMRoute(points, options) {
+    var opts = options || {};
     // Sample down to 25 waypoints max (OSRM limit)
     var sampled = samplePoints(points, 25);
     var coords = sampled.map(function(p) { return p[1] + ',' + p[0]; }).join(';');
 
-    return fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords))
+    return fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords), { signal: opts.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.ok && data.geometry) {
@@ -88,7 +94,10 @@ function fetchOSRMRoute(points) {
             }
             return null;
         })
-        .catch(function() {
+        .catch(function(err) {
+            if (err && err.name === 'AbortError') {
+                return null;
+            }
             return null;
         });
 }
@@ -100,9 +109,11 @@ function fetchOSRMRoute(points) {
  * @param {L.Map} map  Leaflet map instance
  * @param {Array} points  Raw GPS points [lat, lon]
  * @param {Object} style  Polyline style options
+ * @param {Object} options { signal?: AbortSignal }
  * @returns {Promise<L.Polyline>}
  */
-function drawSmartRoute(map, points, style) {
+function drawSmartRoute(map, points, style, options) {
+    var opts = options || {};
     var defaultStyle = {
         color: '#748ffc',
         weight: 3.5,
@@ -114,17 +125,18 @@ function drawSmartRoute(map, points, style) {
         return Promise.resolve(null);
     }
 
-    return fetchOSRMRoute(points).then(function(osrmRoute) {
+    return fetchOSRMRoute(points, opts).then(function(osrmRoute) {
         var drawPoints;
         if (osrmRoute && osrmRoute.length > 1) {
             // OSRM success — use real road route
             drawPoints = osrmRoute;
         } else {
             // OSRM failed — use Catmull-Rom spline fallback
-            drawPoints = smoothPath(points, {
+            var base = points.length > 450 ? samplePoints(points, 450) : points;
+            drawPoints = smoothPath(base, {
                 epsilon: 0.00003,
-                segments: 10,
-                tension: 0.5
+                segments: 8,
+                tension: 0.45
             });
         }
         return L.polyline(drawPoints, mergedStyle).addTo(map);

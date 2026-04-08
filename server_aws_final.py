@@ -625,7 +625,7 @@ def index():
 
 <nav>
     <div class="nav-brand">
-        <span class="brand-icon">📡</span>
+        <span class="brand-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.7 4.3a10 10 0 0 1 0 15.4"/><path d="M4.3 19.7a10 10 0 0 1 0-15.4"/><path d="M16.2 7.8a5.5 5.5 0 0 1 0 8.4"/><path d="M7.8 16.2a5.5 5.5 0 0 1 0-8.4"/></svg></span>
         GIO <span class="brand-sub">TELEMETRY</span>
     </div>
     <div class="nav-tabs">
@@ -633,7 +633,7 @@ def index():
             <div class="dot-live"></div> Tiempo Real
         </button>
         <button class="nav-tab" onclick="switchView('historical')" id="tab-hist">
-            📁 Histórico
+            Histórico
         </button>
     </div>
     <div class="nav-meta">""" + EC2_NAME + """</div>
@@ -673,7 +673,7 @@ def index():
                 Última Posición
             </div>
             <div class="live-panel" id="live-panel">
-                <div class="no-data"><div class="no-data-icon">📍</div>Cargando última posición...</div>
+                <div class="no-data"><div class="no-data-icon">GPS</div>Cargando última posición...</div>
             </div>
         </div>
         <div class="card">
@@ -682,7 +682,7 @@ def index():
                 Recorrido de esta sesión
             </div>
             <div class="live-panel" id="route-info">
-                <div class="no-data"><div class="no-data-icon">🛣️</div>La polilínea se construye desde que abriste la página</div>
+                <div class="no-data"><div class="no-data-icon">RUTA</div>La polilínea se construye desde que abriste la página</div>
             </div>
         </div>
     </div>
@@ -701,7 +701,7 @@ def index():
             <option value="yesterday">Ayer</option>
             <option value="week">Esta semana</option>
         </select>
-        <button class="btn btn-outline" onclick="openModal()">📅 Personalizado</button>
+        <button class="btn btn-outline" onclick="openModal()">Personalizado</button>
         <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
         <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>
         <span id="hist-status" style="font-size:0.75rem;color:var(--text-muted);margin-left:2px;"></span>
@@ -720,7 +720,7 @@ def index():
                 <span class="results-count" id="results-count">&mdash;</span>
             </div>
             <div class="results-list" id="results-list">
-                <div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>
+                <div class="no-data"><div class="no-data-icon">BUSCAR</div>Selecciona un rango y presiona Buscar</div>
             </div>
         </div>
     </div>
@@ -729,7 +729,7 @@ def index():
 <!-- MODAL -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
     <div class="modal" onclick="event.stopPropagation()">
-        <h3>📅 Rango personalizado</h3>
+        <h3>Rango personalizado</h3>
         <div class="quick-ranges">
             <button class="quick-btn" onclick="setQuick('30m')">30 min</button>
             <button class="quick-btn" onclick="setQuick('1h')">1 hora</button>
@@ -980,8 +980,8 @@ function drawHistoricRoute(data){
 
     var first=data[0];
     var last=data[data.length-1];
-    var startIcon=L.divIcon({html:'<span style="font-size:18px">🟢</span>',iconSize:[22,22],className:''});
-    var endIcon=L.divIcon({html:'<span style="font-size:18px">🔴</span>',iconSize:[22,22],className:''});
+    var startIcon=L.divIcon({html:'<svg width="22" height="28" viewBox="0 0 28 36" fill="none"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#51cf66"/><circle cx="14" cy="13" r="5" fill="#0a0e1a" opacity="0.25"/><circle cx="14" cy="13" r="4" fill="white" opacity="0.9"/></svg>',iconSize:[22,28],className:''});
+    var endIcon=L.divIcon({html:'<svg width="22" height="28" viewBox="0 0 28 36" fill="none"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#ff6b6b"/><circle cx="14" cy="13" r="5" fill="#0a0e1a" opacity="0.25"/><circle cx="14" cy="13" r="4" fill="white" opacity="0.9"/></svg>',iconSize:[22,28],className:''});
     histMarkers.push(L.marker([first.lat,first.lon],{icon:startIcon}).addTo(mapHist).bindPopup('<b>Inicio</b><br>'+first.timestamp.substring(0,16)));
     if(data.length>1){
         histMarkers.push(L.marker([last.lat,last.lon],{icon:endIcon}).addTo(mapHist).bindPopup('<b>Fin</b><br>'+last.timestamp.substring(0,16)));
@@ -1029,7 +1029,7 @@ function clearHistoric(){
     histMarkers=[];
     if(routeLineHist){mapHist.removeLayer(routeLineHist);routeLineHist=null;}
     document.getElementById('results-list').innerHTML=
-        '<div class="no-data"><div class="no-data-icon">🔍</div>Selecciona un rango y presiona Buscar</div>';
+        '<div class="no-data"><div class="no-data-icon">BUSCAR</div>Selecciona un rango y presiona Buscar</div>';
     document.getElementById('results-count').textContent='—';
     document.getElementById('hist-status').textContent='';
     document.getElementById('quick-select').value='';

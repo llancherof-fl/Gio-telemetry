@@ -226,6 +226,10 @@ ADMIN_HTML = """<!DOCTYPE html>
         .back-link{font-size:0.75rem;color:var(--text-muted);text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:16px;transition:color 0.2s}
         .back-link:hover{color:var(--blue)}
         .badge{padding:2px 8px;border-radius:5px;font-size:0.65rem;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:0.04em;text-transform:uppercase;background:var(--red-dim);color:var(--red);border:1px solid rgba(255,107,107,0.2)}
+        .ic{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;flex-shrink:0}
+        .ic svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+        .ic-lg{width:16px;height:16px}
+        .ic-lg svg{width:16px;height:16px}
     </style>
 </head>
 <body>
@@ -234,7 +238,12 @@ ADMIN_HTML = """<!DOCTYPE html>
 
     <!-- AUTH -->
     <div class="admin-card" id="auth-card">
-        <h1>🔐 Admin · GIO Telemetry</h1>
+        <h1>
+            <span class="ic ic-lg">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V8a5 5 0 0 1 10 0v3"></path></svg>
+            </span>
+            Admin · GIO Telemetry
+        </h1>
         <p class="subtitle">{{ ec2_name }} — Ingresa el secreto de administración</p>
         <div class="field">
             <label>Admin Secret</label>
@@ -251,9 +260,18 @@ ADMIN_HTML = """<!DOCTYPE html>
         <div class="field">
             <label>Modo de limpieza</label>
             <div class="radio-group">
-                <div class="radio-btn active" onclick="setMode('all')">🗑️ Total</div>
-                <div class="radio-btn" onclick="setMode('range')">📅 Rango</div>
-                <div class="radio-btn" onclick="setMode('older_than')">⏳ Antiguos</div>
+                <div class="radio-btn active" onclick="setMode('all')">
+                    <span class="ic"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg></span>
+                    Total
+                </div>
+                <div class="radio-btn" onclick="setMode('range')">
+                    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>
+                    Rango
+                </div>
+                <div class="radio-btn" onclick="setMode('older_than')">
+                    <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg></span>
+                    Antiguos
+                </div>
             </div>
         </div>
 
@@ -284,13 +302,19 @@ ADMIN_HTML = """<!DOCTYPE html>
         </div>
 
         <div class="confirm-section" id="confirm-section">
-            <div class="warning">⚠️ Esta acción es irreversible y afecta a TODAS las instancias</div>
+            <div class="warning">
+                <span class="ic"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3l-8.47-14.14a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
+                Esta acción es irreversible y afecta a TODAS las instancias
+            </div>
             <div class="field">
                 <label>Escribe ELIMINAR para confirmar</label>
                 <input type="text" id="confirm-input" placeholder="ELIMINAR" oninput="checkConfirm()" autocomplete="off">
             </div>
             <div class="actions">
-                <button class="btn btn-red" id="btn-flush" disabled onclick="executeFlush()">🗑️ Ejecutar Flush</button>
+                <button class="btn btn-red" id="btn-flush" disabled onclick="executeFlush()">
+                    <span class="ic"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg></span>
+                    Ejecutar Flush
+                </button>
             </div>
         </div>
     </div>
@@ -301,6 +325,7 @@ ADMIN_HTML = """<!DOCTYPE html>
 <script>
 var adminSecret='';
 var currentMode='all';
+var FLUSH_LABEL='<span class="ic"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg></span> Ejecutar Flush';
 
 function authenticate(){
     adminSecret=document.getElementById('secret-input').value.trim();
@@ -387,14 +412,14 @@ function executeFlush(){
         headers:{'Content-Type':'application/json','X-Admin-Secret':adminSecret},
         body:JSON.stringify(body)
     }).then(function(r){return r.json()}).then(function(data){
-        document.getElementById('btn-flush').textContent='🗑️ Ejecutar Flush';
+        document.getElementById('btn-flush').innerHTML=FLUSH_LABEL;
         if(data.error){showToast(data.error,'error');return}
-        showToast('✓ '+data.deleted+' registros eliminados. Quedan '+data.remaining,'success');
+        showToast('Completado: '+data.deleted+' registros eliminados. Quedan '+data.remaining,'success');
         document.getElementById('confirm-section').classList.remove('show');
         document.getElementById('preview-box').classList.remove('show');
         document.getElementById('confirm-input').value='';
     }).catch(function(){
-        document.getElementById('btn-flush').textContent='🗑️ Ejecutar Flush';
+        document.getElementById('btn-flush').innerHTML=FLUSH_LABEL;
         showToast('Error al ejecutar flush','error');
     });
 }

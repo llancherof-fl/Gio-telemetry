@@ -31,6 +31,7 @@ def init_db():
         ''')
         c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_ts ON coordinates(timestamp)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_device ON coordinates(device)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_device_ts ON coordinates(device, timestamp)')
         conn.commit()
         print("[DB] Tabla 'coordinates' lista.")
     finally:
@@ -76,12 +77,27 @@ def insert_data(lat, lon, device, raw_ts):
         release_conn(conn)
 
 
-def fetch_latest():
-    """Fetch the most recent coordinate."""
+def fetch_latest(device=None):
+    """Fetch the most recent coordinate, optionally filtered by device."""
     conn = get_conn()
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute('SELECT id, timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT 1')
+        if device:
+            c.execute(
+                '''SELECT id, timestamp, lat, lon, device
+                   FROM coordinates
+                   WHERE device = %s
+                   ORDER BY id DESC
+                   LIMIT 1''',
+                (device,),
+            )
+        else:
+            c.execute(
+                '''SELECT id, timestamp, lat, lon, device
+                   FROM coordinates
+                   ORDER BY id DESC
+                   LIMIT 1'''
+            )
         row = c.fetchone()
         if row:
             row = dict(row)
@@ -110,17 +126,32 @@ def fetch_history(limit=None):
         release_conn(conn)
 
 
-def fetch_history_range(start_ts, end_ts, limit=500):
-    """Fetch coordinates within a time range."""
+def fetch_history_range(start_ts, end_ts, limit=500, offset=0, device=None):
+    """Fetch coordinates within a time range, optionally filtered by device."""
     conn = get_conn()
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute(
-            '''SELECT timestamp, lat, lon, device FROM coordinates
-               WHERE timestamp >= %s AND timestamp <= %s
-               ORDER BY timestamp ASC LIMIT %s''',
-            (start_ts, end_ts, limit),
-        )
+        if device:
+            c.execute(
+                '''SELECT timestamp, lat, lon, device
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                     AND device = %s
+                   ORDER BY timestamp ASC
+                   LIMIT %s OFFSET %s''',
+                (start_ts, end_ts, device, limit, offset),
+            )
+        else:
+            c.execute(
+                '''SELECT timestamp, lat, lon, device
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                   ORDER BY timestamp ASC
+                   LIMIT %s OFFSET %s''',
+                (start_ts, end_ts, limit, offset),
+            )
         rows = [dict(r) for r in c.fetchall()]
         for r in rows:
             r['timestamp'] = str(r['timestamp'])
@@ -129,19 +160,47 @@ def fetch_history_range(start_ts, end_ts, limit=500):
         release_conn(conn)
 
 
+def fetch_devices(limit=200):
+    """Fetch distinct device names for UI filters."""
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        c.execute(
+            '''SELECT DISTINCT device
+               FROM coordinates
+               WHERE device IS NOT NULL
+                 AND device <> ''
+               ORDER BY device ASC
+               LIMIT %s''',
+            (limit,),
+        )
+        return [row[0] for row in c.fetchall()]
+    finally:
+        release_conn(conn)
+
+
 def fetch_stats():
-    """Fetch aggregate statistics (total, first, last)."""
+    """Fetch lightweight aggregate statistics (estimated total, first, last)."""
     conn = get_conn()
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        c.execute('SELECT COUNT(*) as total FROM coordinates')
-        total = c.fetchone()['total']
-        c.execute('SELECT MIN(timestamp) as first_ts, MAX(timestamp) as last_ts FROM coordinates')
-        row = dict(c.fetchone())
+        # reltuples provides an approximate row count from planner stats (fast, non-blocking).
+        c.execute(
+            '''SELECT COALESCE(reltuples::BIGINT, 0) AS total_est
+               FROM pg_class
+               WHERE oid = 'coordinates'::regclass'''
+        )
+        total = c.fetchone()['total_est']
+
+        c.execute('SELECT timestamp FROM coordinates ORDER BY timestamp ASC LIMIT 1')
+        first_row = c.fetchone()
+        c.execute('SELECT timestamp FROM coordinates ORDER BY timestamp DESC LIMIT 1')
+        last_row = c.fetchone()
+
         return {
             'total_records': total,
-            'first_record': str(row['first_ts']) if row['first_ts'] else None,
-            'last_record': str(row['last_ts']) if row['last_ts'] else None,
+            'first_record': str(first_row['timestamp']) if first_row else None,
+            'last_record': str(last_row['timestamp']) if last_row else None,
         }
     finally:
         release_conn(conn)
