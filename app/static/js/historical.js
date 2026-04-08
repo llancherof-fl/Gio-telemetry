@@ -128,6 +128,19 @@ function getSelectedDevice() {
     return select ? (select.value || '').trim() : '';
 }
 
+function countDistinctDevices(rows) {
+    if (!rows || !rows.length) return 0;
+    var seen = {};
+    var count = 0;
+    for (var i = 0; i < rows.length; i++) {
+        var key = (rows[i].device || '').trim() || '__unknown__';
+        if (seen[key]) continue;
+        seen[key] = true;
+        count += 1;
+    }
+    return count;
+}
+
 function getSampleMinutes() {
     var select = document.getElementById('sample-select');
     if (!select) return 3;
@@ -328,6 +341,8 @@ function runHistoricQuery() {
 
             var data = response.data || [];
             var meta = response.meta || {};
+            var selectedDevice = getSelectedDevice();
+            var distinctDevices = countDistinctDevices(data);
 
             if (meta.clamped) {
                 showToast('Fecha fin ajustada al momento actual');
@@ -335,6 +350,9 @@ function runHistoricQuery() {
             if (meta.dropped_outliers || meta.dropped_invalid) {
                 var dropped = (meta.dropped_outliers || 0) + (meta.dropped_invalid || 0);
                 showToast('Se omitieron ' + dropped + ' puntos atípicos o inválidos');
+            }
+            if (!selectedDevice && distinctDevices > 1) {
+                showToast('Vista combinada: selecciona un vehículo para una ruta más precisa');
             }
 
             if (!data.length) {
@@ -489,9 +507,21 @@ function drawHistoricRoute(data, token) {
 
     var points = data.map(function(r) { return [parseFloat(r.lat), parseFloat(r.lon)]; });
     var basePoints = points.length > 550 ? samplePoints(points, 550) : points;
+    var previewSegments = splitByLargeJumps(basePoints, 28);
+    if (!previewSegments.length) {
+        previewSegments = [basePoints];
+    }
+    var preview = previewSegments.map(function(segment) {
+        return smoothPath(segment, { segments: 7, tension: 0.45 });
+    }).filter(function(segment) {
+        return segment && segment.length > 1;
+    });
+    if (!preview.length && basePoints.length > 1) {
+        preview = [basePoints.slice()];
+    }
+    var previewDraw = preview.length === 1 ? preview[0] : preview;
 
-    var preview = smoothPath(basePoints, { segments: 7, tension: 0.45 });
-    routeLineHist = L.polyline(preview, {
+    routeLineHist = L.polyline(previewDraw, {
         color: '#5f95ff',
         weight: 3,
         opacity: 0.62,
@@ -510,7 +540,14 @@ function drawHistoricRoute(data, token) {
         weight: 3.6,
         opacity: 0.88
     }, {
-        signal: histRouteController.signal
+        signal: histRouteController.signal,
+        maxJumpKm: 28,
+        maxInputPoints: 260,
+        minPointDistanceMeters: 3,
+        chunked: true,
+        chunkWaypoints: 25,
+        chunkOverlap: 1,
+        maxChunksPerSegment: 9
     }).then(function(line) {
         if (token !== histQueryToken) {
             if (line) mapHist.removeLayer(line);
