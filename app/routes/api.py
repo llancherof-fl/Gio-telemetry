@@ -1,15 +1,44 @@
 """
 GIO Telemetry — API Endpoints
-/api/latest, /api/history, /api/history-range, /api/stats, /api/osrm-proxy, /health, /test_db
+/api/latest, /api/history, /api/history-range, /api/devices, /api/stats, /api/osrm-proxy, /health, /test_db
 """
 import datetime
 
 from flask import Blueprint, jsonify, request, current_app
 
 from app.config import Config
-from app.database import fetch_latest, fetch_history, fetch_history_range
+from app.database import fetch_latest, fetch_history, fetch_history_range, fetch_devices
 
 api_bp = Blueprint('api', __name__)
+
+
+def _clamp(value, minimum, maximum):
+    return max(minimum, min(value, maximum))
+
+
+def _downsample_rows(rows, sample_minutes):
+    """
+    Downsample by keeping the latest point per N-minute bucket (per device).
+    This reduces map noise and payload size for historical rendering.
+    """
+    if sample_minutes < 2 or len(rows) < 3:
+        return rows
+
+    bucketed = {}
+    for row in rows:
+        try:
+            ts = datetime.datetime.fromisoformat(row['timestamp'])
+        except (ValueError, TypeError):
+            continue
+
+        minute_bucket = (ts.minute // sample_minutes) * sample_minutes
+        bucket_ts = ts.replace(minute=minute_bucket, second=0, microsecond=0)
+        device_key = row.get('device', '') or ''
+        bucketed[(device_key, bucket_ts.isoformat())] = row
+
+    sampled = list(bucketed.values())
+    sampled.sort(key=lambda r: r.get('timestamp', ''))
+    return sampled
 
 
 # ══════════════════════════════════════════
@@ -53,7 +82,8 @@ def test_db():
 
 @api_bp.route('/api/latest')
 def api_latest():
-    result = fetch_latest()
+    device = (request.args.get('device') or '').strip() or None
+    result = fetch_latest(device=device)
     if result:
         return jsonify(result)
     return jsonify({'error': 'Sin datos aun'})
@@ -70,10 +100,28 @@ def api_history():
 def api_history_range():
     start = request.args.get('start')
     end = request.args.get('end')
-    limit = request.args.get('limit', 500, type=int)
+    limit = request.args.get('limit', 1200, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    device = (request.args.get('device') or '').strip() or None
+    sample_minutes = request.args.get(
+        'sample_minutes',
+        Config.HISTORY_SAMPLE_MINUTES_DEFAULT,
+        type=int,
+    )
 
     if not start or not end:
         return jsonify({'error': 'Se requieren parametros start y end'}), 400
+
+    if limit is None:
+        limit = 1200
+    if offset is None:
+        offset = 0
+    if sample_minutes is None:
+        sample_minutes = Config.HISTORY_SAMPLE_MINUTES_DEFAULT
+
+    safe_limit = _clamp(limit, 1, Config.HISTORY_RANGE_MAX)
+    safe_offset = max(0, offset)
+    safe_sample_minutes = _clamp(sample_minutes, 0, Config.HISTORY_SAMPLE_MINUTES_MAX)
 
     # Parse dates
     try:
@@ -96,18 +144,44 @@ def api_history_range():
         end_dt = now_colombia
         clamped = True
 
-    safe_limit = min(limit, Config.HISTORY_RANGE_MAX)
-    rows = fetch_history_range(start_dt, end_dt, safe_limit)
+    rows = fetch_history_range(
+        start_dt,
+        end_dt,
+        safe_limit,
+        offset=safe_offset,
+        device=device,
+    )
+    raw_count = len(rows)
+    sampled_rows = _downsample_rows(rows, safe_sample_minutes)
 
     return jsonify({
-        'data': rows,
+        'data': sampled_rows,
         'meta': {
-            'count': len(rows),
+            'count': len(sampled_rows),
+            'raw_count': raw_count,
             'start': start_dt.isoformat(),
             'end': end_dt.isoformat(),
             'clamped': clamped,
             'limit': safe_limit,
+            'offset': safe_offset,
+            'sample_minutes': safe_sample_minutes,
+            'sampled': safe_sample_minutes >= 2,
+            'device': device,
+            'has_more': raw_count == safe_limit,
         },
+    })
+
+
+# ══════════════════════════════════════════
+#  FILTER OPTIONS
+# ══════════════════════════════════════════
+
+@api_bp.route('/api/devices')
+def api_devices():
+    devices = fetch_devices(limit=200)
+    return jsonify({
+        'devices': devices,
+        'count': len(devices),
     })
 
 

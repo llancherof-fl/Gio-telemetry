@@ -43,5 +43,7 @@ class Config:
 
     # ── Limits ──
     HISTORY_LIMIT = int(os.environ.get('HISTORY_LIMIT', 50))
-    HISTORY_RANGE_MAX = 1000
+    HISTORY_RANGE_MAX = int(os.environ.get('HISTORY_RANGE_MAX', 5000))
+    HISTORY_SAMPLE_MINUTES_DEFAULT = int(os.environ.get('HISTORY_SAMPLE_MINUTES_DEFAULT', 3))
+    HISTORY_SAMPLE_MINUTES_MAX = int(os.environ.get('HISTORY_SAMPLE_MINUTES_MAX', 15))
     STATS_CACHE_INTERVAL = 30  # seconds

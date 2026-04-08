@@ -3,7 +3,6 @@ GIO Telemetry — OSRM Proxy with LRU In-Memory Cache
 Routes requests through our backend to avoid CORS and adds caching.
 """
 import hashlib
-import json
 import time
 import threading
 
