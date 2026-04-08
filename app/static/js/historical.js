@@ -6,6 +6,7 @@
 
 var histMarkers = [];
 var routeLineHist = null;
+var historicRouteBounds = null;
 var currentRange = { start: null, end: null };
 var CACHE_KEY = 'gio_hist_cache_v2';
 var CACHE_PTS = 30;
@@ -53,8 +54,25 @@ function loadDeviceOptions() {
     select.addEventListener('change', saveHistoryFilters);
 
     var sampleSelect = document.getElementById('sample-select');
+    var customInput = document.getElementById('sample-custom-minutes');
     if (sampleSelect) {
-        sampleSelect.addEventListener('change', saveHistoryFilters);
+        sampleSelect.addEventListener('change', function() {
+            syncSampleCustomUi();
+            saveHistoryFilters();
+        });
+    }
+    if (customInput) {
+        customInput.addEventListener('input', function() {
+            sanitizeCustomSampleInput();
+            saveHistoryFilters();
+        });
+    }
+
+    syncSampleCustomUi();
+    updateHistoricFitButtonState(false);
+
+    if (typeof updateLayoutOffsets === 'function') {
+        updateLayoutOffsets();
     }
 }
 
@@ -66,13 +84,23 @@ function restoreHistoryFilters() {
 
         var sampleSelect = document.getElementById('sample-select');
         var deviceSelect = document.getElementById('device-select');
+        var customInput = document.getElementById('sample-custom-minutes');
 
         if (sampleSelect && saved.sampleMinutes) {
-            sampleSelect.value = String(saved.sampleMinutes);
+            if (saved.sampleMode === 'custom') {
+                sampleSelect.value = 'custom';
+            } else {
+                sampleSelect.value = String(saved.sampleMinutes);
+            }
         }
         if (deviceSelect && saved.device) {
             deviceSelect.value = saved.device;
         }
+        if (customInput && saved.sampleCustomMinutes) {
+            customInput.value = String(saved.sampleCustomMinutes);
+        }
+
+        syncSampleCustomUi();
     } catch (e) {
         // ignore corrupt storage
     }
@@ -82,9 +110,12 @@ function saveHistoryFilters() {
     try {
         var sampleSelect = document.getElementById('sample-select');
         var deviceSelect = document.getElementById('device-select');
+        var customInput = document.getElementById('sample-custom-minutes');
 
         localStorage.setItem(FILTERS_KEY, JSON.stringify({
-            sampleMinutes: sampleSelect ? sampleSelect.value : '3',
+            sampleMinutes: getSampleMinutes(),
+            sampleMode: sampleSelect ? sampleSelect.value : '3',
+            sampleCustomMinutes: customInput ? sanitizeCustomSampleInput() : 3,
             device: deviceSelect ? deviceSelect.value : ''
         }));
     } catch (e) {
@@ -99,8 +130,49 @@ function getSelectedDevice() {
 
 function getSampleMinutes() {
     var select = document.getElementById('sample-select');
-    var value = select ? parseInt(select.value, 10) : 3;
-    return isFinite(value) ? Math.max(1, value) : 3;
+    if (!select) return 3;
+
+    if (select.value === 'custom') {
+        return sanitizeCustomSampleInput();
+    }
+
+    var value = parseInt(select.value, 10);
+    return isFinite(value) ? Math.min(60, Math.max(1, value)) : 3;
+}
+
+function sanitizeCustomSampleInput() {
+    var input = document.getElementById('sample-custom-minutes');
+    if (!input) return 3;
+
+    var value = parseInt(input.value, 10);
+    if (!isFinite(value)) value = 3;
+    value = Math.min(60, Math.max(1, value));
+    input.value = String(value);
+    return value;
+}
+
+function syncSampleCustomUi() {
+    var select = document.getElementById('sample-select');
+    var wrap = document.getElementById('sample-custom-wrap');
+    if (!select || !wrap) return;
+
+    var isCustom = select.value === 'custom';
+    wrap.hidden = !isCustom;
+    if (isCustom) {
+        sanitizeCustomSampleInput();
+    }
+}
+
+function getSampleLabel() {
+    var select = document.getElementById('sample-select');
+    if (!select) return '3 min';
+
+    if (select.value === 'custom') {
+        return sanitizeCustomSampleInput() + ' min (custom)';
+    }
+
+    var option = select.options[select.selectedIndex];
+    return option ? option.textContent : String(getSampleMinutes()) + ' min';
 }
 
 // ══════════════════════════════════════════
@@ -150,6 +222,58 @@ function setHistoricStatus(msg, color) {
     if (!status) return;
     status.textContent = msg || '';
     status.style.color = color || 'var(--text-muted)';
+}
+
+function updateHistoricFitButtonState(enabled) {
+    var btn = document.getElementById('btn-hist-fit');
+    if (!btn) return;
+    btn.disabled = !enabled;
+}
+
+function getHistoricFitPadding() {
+    var right = 34;
+    var panel = document.getElementById('results-panel');
+    var histLayout = document.getElementById('hist-layout');
+    var isDesktop = window.innerWidth > 960;
+    var panelVisible = isDesktop
+        && histLayout
+        && !histLayout.classList.contains('panel-collapsed')
+        && panel
+        && window.getComputedStyle(panel).display !== 'none';
+
+    if (panelVisible) {
+        right = Math.round(panel.getBoundingClientRect().width + 26);
+    }
+
+    return {
+        topLeft: [36, 34],
+        bottomRight: [right, 42]
+    };
+}
+
+function fitHistoricBounds(bounds, animate) {
+    if (!mapHist || !bounds || !bounds.isValid()) return;
+    var pad = getHistoricFitPadding();
+    mapHist.fitBounds(bounds, {
+        paddingTopLeft: pad.topLeft,
+        paddingBottomRight: pad.bottomRight,
+        maxZoom: 16,
+        animate: animate !== false
+    });
+}
+
+function fitHistoricRoute() {
+    if (!historicRouteBounds) return;
+    fitHistoricBounds(historicRouteBounds, true);
+}
+
+function refreshHistoricLayout(skipAnimation) {
+    if (!mapHist) return;
+    mapHist.invalidateSize();
+    if (!historicRouteBounds) return;
+    setTimeout(function() {
+        fitHistoricBounds(historicRouteBounds, !skipAnimation);
+    }, 40);
 }
 
 function getHistoryUrl() {
@@ -215,6 +339,8 @@ function runHistoricQuery() {
 
             if (!data.length) {
                 clearHistoricLayers();
+                historicRouteBounds = null;
+                updateHistoricFitButtonState(false);
                 document.getElementById('results-list').innerHTML =
                     '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin registros en ese período</div>';
                 document.getElementById('results-count').textContent = '0';
@@ -226,9 +352,7 @@ function runHistoricQuery() {
             drawHistoricRoute(data, token);
             saveToCache(data, meta);
 
-            var sampledInfo = (meta.sampled && meta.sample_minutes)
-                ? ' · suavizado ' + meta.sample_minutes + ' min'
-                : '';
+            var sampledInfo = ' · precisión ' + getSampleLabel();
             var cleanedInfo = meta.dropped_outliers
                 ? ' · depurados ' + meta.dropped_outliers
                 : '';
@@ -337,6 +461,9 @@ function clearHistoricLayers() {
         mapHist.removeLayer(routeLineHist);
         routeLineHist = null;
     }
+
+    historicRouteBounds = null;
+    updateHistoricFitButtonState(false);
 }
 
 function drawHistoricRoute(data, token) {
@@ -371,7 +498,9 @@ function drawHistoricRoute(data, token) {
         dashArray: '8 5'
     }).addTo(mapHist);
 
-    mapHist.fitBounds(routeLineHist.getBounds(), { padding: [34, 34] });
+    historicRouteBounds = routeLineHist.getBounds();
+    updateHistoricFitButtonState(true);
+    fitHistoricBounds(historicRouteBounds, true);
     setHistoricStatus('Calculando ruta...', 'var(--blue-strong)');
 
     histRouteController = new AbortController();
@@ -395,7 +524,9 @@ function drawHistoricRoute(data, token) {
 
         if (routeLineHist) mapHist.removeLayer(routeLineHist);
         routeLineHist = line;
-        mapHist.fitBounds(routeLineHist.getBounds(), { padding: [34, 34] });
+        historicRouteBounds = routeLineHist.getBounds();
+        updateHistoricFitButtonState(true);
+        fitHistoricBounds(historicRouteBounds, true);
     });
 }
 
@@ -427,6 +558,7 @@ function clearHistoric(silent) {
     if (mapHist) {
         mapHist.setView([10.9878, -74.7889], 13, { animate: true });
     }
+    updateHistoricFitButtonState(false);
 
     if (!silent) {
         showToast('Mapa histórico limpio');
@@ -459,7 +591,9 @@ function openModal() {
 
 function closeModal() {
     document.getElementById('modal-overlay').classList.remove('open');
-    document.body.style.overflow = '';
+    if (!document.getElementById('help-overlay') || !document.getElementById('help-overlay').classList.contains('open')) {
+        document.body.style.overflow = '';
+    }
 }
 
 function closeModalOutside(e) {
@@ -593,8 +727,10 @@ function loadCachedRoute() {
             dashArray: '6 4'
         }).addTo(mapHist);
         routeLineHist = cachedLine;
+        historicRouteBounds = cachedLine.getBounds();
+        updateHistoricFitButtonState(true);
 
-        mapHist.fitBounds(cachedLine.getBounds(), { padding: [40, 40] });
+        fitHistoricBounds(historicRouteBounds, false);
 
         var savedAt = new Date(cache.savedAt).toLocaleString('es-CO');
 
