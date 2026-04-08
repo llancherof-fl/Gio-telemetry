@@ -6,6 +6,45 @@
 var mapRT = null;
 var mapHist = null;
 
+function distanceKm(a, b) {
+    var toRad = Math.PI / 180;
+    var dLat = (b[0] - a[0]) * toRad;
+    var dLon = (b[1] - a[1]) * toRad;
+    var lat1 = a[0] * toRad;
+    var lat2 = b[0] * toRad;
+    var sinLat = Math.sin(dLat / 2);
+    var sinLon = Math.sin(dLon / 2);
+    var aa = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+    var c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+    return 6371.0088 * c;
+}
+
+function splitByLargeJumps(points, maxJumpKm) {
+    if (!points || points.length < 2) return [];
+
+    var segments = [];
+    var current = [points[0]];
+
+    for (var i = 1; i < points.length; i++) {
+        var prev = points[i - 1];
+        var curr = points[i];
+        if (distanceKm(prev, curr) > maxJumpKm) {
+            if (current.length > 1) {
+                segments.push(current);
+            }
+            current = [curr];
+            continue;
+        }
+        current.push(curr);
+    }
+
+    if (current.length > 1) {
+        segments.push(current);
+    }
+
+    return segments;
+}
+
 /**
  * Initialize both maps (real-time and historical).
  */
@@ -114,6 +153,7 @@ function fetchOSRMRoute(points, options) {
  */
 function drawSmartRoute(map, points, style, options) {
     var opts = options || {};
+    var maxJumpKm = Math.max(40, Number(opts.maxJumpKm || 350));
     var defaultStyle = {
         color: '#748ffc',
         weight: 3.5,
@@ -124,8 +164,23 @@ function drawSmartRoute(map, points, style, options) {
     if (points.length < 2) {
         return Promise.resolve(null);
     }
+    if (opts.signal && opts.signal.aborted) {
+        return Promise.resolve(null);
+    }
 
-    return fetchOSRMRoute(points, opts).then(function(osrmRoute) {
+    var segments = splitByLargeJumps(points, maxJumpKm);
+    var osrmInput = points;
+    if (segments.length > 1) {
+        osrmInput = segments.reduce(function(best, segment) {
+            return segment.length > best.length ? segment : best;
+        }, segments[0]);
+    }
+
+    return fetchOSRMRoute(osrmInput, opts).then(function(osrmRoute) {
+        if (opts.signal && opts.signal.aborted) {
+            return null;
+        }
+
         var drawPoints;
         if (osrmRoute && osrmRoute.length > 1) {
             // OSRM success — use real road route
@@ -133,11 +188,31 @@ function drawSmartRoute(map, points, style, options) {
         } else {
             // OSRM failed — use Catmull-Rom spline fallback
             var base = points.length > 450 ? samplePoints(points, 450) : points;
-            drawPoints = smoothPath(base, {
-                epsilon: 0.00003,
-                segments: 8,
-                tension: 0.45
-            });
+            var safeSegments = splitByLargeJumps(base, maxJumpKm);
+            if (!safeSegments.length) {
+                safeSegments = [base];
+            }
+
+            var smoothed = safeSegments
+                .map(function(segment) {
+                    return smoothPath(segment, {
+                        epsilon: 0.00003,
+                        segments: 8,
+                        tension: 0.45
+                    });
+                })
+                .filter(function(segment) {
+                    return segment && segment.length > 1;
+                });
+
+            if (smoothed.length === 1) {
+                drawPoints = smoothed[0];
+            } else {
+                drawPoints = smoothed;
+            }
+        }
+        if (!drawPoints || drawPoints.length < 2) {
+            return null;
         }
         return L.polyline(drawPoints, mergedStyle).addTo(map);
     });

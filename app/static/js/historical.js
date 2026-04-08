@@ -208,6 +208,10 @@ function runHistoricQuery() {
             if (meta.clamped) {
                 showToast('Fecha fin ajustada al momento actual');
             }
+            if (meta.dropped_outliers || meta.dropped_invalid) {
+                var dropped = (meta.dropped_outliers || 0) + (meta.dropped_invalid || 0);
+                showToast('Se omitieron ' + dropped + ' puntos atípicos o inválidos');
+            }
 
             if (!data.length) {
                 clearHistoricLayers();
@@ -225,7 +229,10 @@ function runHistoricQuery() {
             var sampledInfo = (meta.sampled && meta.sample_minutes)
                 ? ' · suavizado ' + meta.sample_minutes + ' min'
                 : '';
-            setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo, 'var(--green)');
+            var cleanedInfo = meta.dropped_outliers
+                ? ' · depurados ' + meta.dropped_outliers
+                : '';
+            setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + cleanedInfo, 'var(--green)');
 
             if (meta.has_more) {
                 showToast('Se alcanzó el límite de consulta. Ajusta rango o filtro de vehículo.');
@@ -585,6 +592,7 @@ function loadCachedRoute() {
             opacity: 0.34,
             dashArray: '6 4'
         }).addTo(mapHist);
+        routeLineHist = cachedLine;
 
         mapHist.fitBounds(cachedLine.getBounds(), { padding: [40, 40] });
 

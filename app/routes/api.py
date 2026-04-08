@@ -3,6 +3,8 @@ GIO Telemetry — API Endpoints
 /api/latest, /api/history, /api/history-range, /api/devices, /api/stats, /api/osrm-proxy, /health, /test_db
 """
 import datetime
+import math
+import time
 
 from flask import Blueprint, jsonify, request, current_app
 
@@ -10,10 +12,105 @@ from app.config import Config
 from app.database import fetch_latest, fetch_history, fetch_history_range, fetch_devices
 
 api_bp = Blueprint('api', __name__)
+_devices_cache = {
+    'data': [],
+    'expires_at': 0.0,
+}
 
 
 def _clamp(value, minimum, maximum):
     return max(minimum, min(value, maximum))
+
+
+def _parse_ts(value):
+    if isinstance(value, datetime.datetime):
+        return value
+    if value is None:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _is_valid_latlon(lat, lon):
+    return (-90.0 <= lat <= 90.0) and (-180.0 <= lon <= 180.0)
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    radius_km = 6371.0088
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2) ** 2
+    )
+    return 2 * radius_km * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _sanitize_history_rows(rows, max_speed_kmh, min_jump_km):
+    """
+    Drop clearly invalid coordinates and impossible "teleport" jumps per device.
+    This prevents transoceanic artifacts and OSRM failures in historical routes.
+    """
+    if len(rows) < 2:
+        return rows, {'dropped_invalid': 0, 'dropped_outliers': 0}
+
+    prev_by_device = {}
+    cleaned = []
+    dropped_invalid = 0
+    dropped_outliers = 0
+
+    for row in rows:
+        try:
+            lat = float(row.get('lat'))
+            lon = float(row.get('lon'))
+        except (ValueError, TypeError):
+            dropped_invalid += 1
+            continue
+
+        if not _is_valid_latlon(lat, lon):
+            dropped_invalid += 1
+            continue
+
+        device_key = (row.get('device') or '').strip() or '__unknown__'
+        ts = _parse_ts(row.get('timestamp'))
+        prev = prev_by_device.get(device_key)
+
+        if prev:
+            dist_km = _haversine_km(prev['lat'], prev['lon'], lat, lon)
+            if dist_km >= min_jump_km:
+                should_drop = False
+                prev_ts = prev['ts']
+
+                if prev_ts and ts:
+                    delta_seconds = (ts - prev_ts).total_seconds()
+                    if delta_seconds <= 0:
+                        should_drop = True
+                    else:
+                        speed_kmh = dist_km / (delta_seconds / 3600.0)
+                        if speed_kmh > max_speed_kmh:
+                            should_drop = True
+
+                if should_drop:
+                    dropped_outliers += 1
+                    continue
+
+        clean_row = dict(row)
+        clean_row['lat'] = lat
+        clean_row['lon'] = lon
+        if ts:
+            clean_row['timestamp'] = ts.isoformat(sep=' ')
+
+        cleaned.append(clean_row)
+        prev_by_device[device_key] = {'lat': lat, 'lon': lon, 'ts': ts}
+
+    return cleaned, {
+        'dropped_invalid': dropped_invalid,
+        'dropped_outliers': dropped_outliers,
+    }
 
 
 def _downsample_rows(rows, sample_minutes):
@@ -152,13 +249,22 @@ def api_history_range():
         device=device,
     )
     raw_count = len(rows)
-    sampled_rows = _downsample_rows(rows, safe_sample_minutes)
+    max_speed_kmh = max(30.0, float(getattr(Config, 'HISTORY_OUTLIER_MAX_SPEED_KMH', 240)))
+    min_jump_km = max(1.0, float(getattr(Config, 'HISTORY_OUTLIER_MIN_JUMP_KM', 5)))
+
+    cleaned_rows, sanitize_meta = _sanitize_history_rows(
+        rows,
+        max_speed_kmh=max_speed_kmh,
+        min_jump_km=min_jump_km,
+    )
+    sampled_rows = _downsample_rows(cleaned_rows, safe_sample_minutes)
 
     return jsonify({
         'data': sampled_rows,
         'meta': {
             'count': len(sampled_rows),
             'raw_count': raw_count,
+            'clean_count': len(cleaned_rows),
             'start': start_dt.isoformat(),
             'end': end_dt.isoformat(),
             'clamped': clamped,
@@ -168,6 +274,8 @@ def api_history_range():
             'sampled': safe_sample_minutes >= 2,
             'device': device,
             'has_more': raw_count == safe_limit,
+            'dropped_invalid': sanitize_meta['dropped_invalid'],
+            'dropped_outliers': sanitize_meta['dropped_outliers'],
         },
     })
 
@@ -178,10 +286,22 @@ def api_history_range():
 
 @api_bp.route('/api/devices')
 def api_devices():
+    now = time.time()
+    if _devices_cache['expires_at'] > now:
+        return jsonify({
+            'devices': _devices_cache['data'],
+            'count': len(_devices_cache['data']),
+            'cached': True,
+        })
+
     devices = fetch_devices(limit=200)
+    _devices_cache['data'] = devices
+    _devices_cache['expires_at'] = now + max(5, Config.DEVICES_CACHE_TTL)
+
     return jsonify({
         'devices': devices,
         'count': len(devices),
+        'cached': False,
     })
 
 

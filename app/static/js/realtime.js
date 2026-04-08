@@ -16,18 +16,31 @@ var RT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 var RT_CACHE_MAX_POINTS = 260;
 var RT_MAX_SESSION_POINTS = 700;
 var RT_MIN_POINT_DISTANCE_METERS = 4;
+var RT_OSRM_WAYPOINTS = 25;
+var RT_OSRM_TIMEOUT_MS = 8500;
+var RT_OSRM_DEBOUNCE_MS = 1800;
+var RT_OSRM_FORCE_REFRESH_MS = 18000;
+var RT_OSRM_MIN_POINTS_DELTA = 2;
+var RT_OSRM_DRIFT_REFRESH_METERS = 45;
+var RT_OSRM_APPEND_MAX_METERS = 120;
+var RT_FETCH_TIMEOUT_MS = 6000;
 
 var autoFollow = true;
 var followUiLockUntil = 0;
 var lastRealtimeDevice = '';
+var activeRealtimeStreamDevice = '';
 
 // ── OSRM debounce state for real-time ──
 var rtOsrm = {
     inFlight: false,
+    pending: false,
     timer: null,
+    controller: null,
     cachedRoute: null,
     lastComputedCount: 0,
-    DEBOUNCE: 5000
+    lastComputedAt: 0,
+    lastRouteEnd: null,
+    DEBOUNCE: RT_OSRM_DEBOUNCE_MS
 };
 
 // ── Polling control ──
@@ -38,6 +51,8 @@ var MAX_BACKOFF = 16;
 
 // ── Cache save throttling ──
 var rtSaveTimer = null;
+var latestFetchInFlight = false;
+var latestFetchController = null;
 
 /**
  * Initialize real-time polling with visibility detection and map interaction hooks.
@@ -158,22 +173,99 @@ function updateRecenterButtonsState(enabled) {
     if (fab) fab.disabled = !enabled;
 }
 
+function clearRtOsrmTimer() {
+    if (rtOsrm.timer) {
+        clearTimeout(rtOsrm.timer);
+        rtOsrm.timer = null;
+    }
+}
+
+function scheduleSessionOSRM(forceFast) {
+    if (sessionPoints.length < 2) return;
+
+    clearRtOsrmTimer();
+
+    var delay = forceFast ? 380 : rtOsrm.DEBOUNCE;
+    var latest = sessionPoints[sessionPoints.length - 1];
+    if (rtOsrm.lastRouteEnd && latest) {
+        var drift = haversineDistance(rtOsrm.lastRouteEnd, latest);
+        if (drift > RT_OSRM_APPEND_MAX_METERS) {
+            delay = 550;
+        } else if ((sessionPoints.length - rtOsrm.lastComputedCount) >= 4) {
+            delay = 900;
+        }
+    } else if (!rtOsrm.cachedRoute) {
+        delay = 700;
+    }
+
+    rtOsrm.timer = setTimeout(function() {
+        rtOsrm.timer = null;
+        executeSessionOSRM();
+    }, Math.max(250, delay));
+}
+
+function resetRealtimeRouteState(message) {
+    if (routeLineRT) {
+        mapRT.removeLayer(routeLineRT);
+        routeLineRT = null;
+    }
+
+    sessionPoints = [];
+    sessionStartTime = new Date().toLocaleTimeString('es-CO');
+
+    clearRtOsrmTimer();
+    if (rtOsrm.controller) {
+        rtOsrm.controller.abort();
+        rtOsrm.controller = null;
+    }
+    if (latestFetchController) {
+        latestFetchController.abort();
+        latestFetchController = null;
+    }
+    latestFetchInFlight = false;
+
+    rtOsrm.cachedRoute = null;
+    rtOsrm.inFlight = false;
+    rtOsrm.pending = false;
+    rtOsrm.lastComputedCount = 0;
+    rtOsrm.lastComputedAt = 0;
+    rtOsrm.lastRouteEnd = null;
+
+    var routeInfo = document.getElementById('route-info');
+    if (routeInfo) {
+        routeInfo.innerHTML =
+            '<div class="no-data"><div class="no-data-icon">' + SVG_SEARCH + '</div>' +
+            (message || 'Esperando puntos para construir ruta...') +
+            '</div>';
+    }
+}
+
 /**
  * Fetch latest GPS position with change detection.
  */
 function fetchLatest() {
-    var device = getRealtimeDeviceFilter();
-    if (device !== lastRealtimeDevice) {
-        resetRealtimeSessionForDevice(device);
-        lastRealtimeDevice = device;
+    var selectedDevice = getRealtimeDeviceFilter();
+    if (selectedDevice !== lastRealtimeDevice) {
+        resetRealtimeSessionForDevice(selectedDevice);
+        lastRealtimeDevice = selectedDevice;
     }
 
+    var effectiveDevice = selectedDevice || activeRealtimeStreamDevice;
     var url = '/api/latest';
-    if (device) {
-        url += '?device=' + encodeURIComponent(device);
+    if (effectiveDevice) {
+        url += '?device=' + encodeURIComponent(effectiveDevice);
     }
 
-    fetch(url)
+    if (latestFetchInFlight) return;
+
+    var controller = new AbortController();
+    latestFetchController = controller;
+    latestFetchInFlight = true;
+    var fetchTimeoutId = setTimeout(function() {
+        controller.abort();
+    }, RT_FETCH_TIMEOUT_MS);
+
+    fetch(url, { signal: controller.signal })
         .then(function(r) {
             if (!r.ok) throw new Error('HTTP_' + r.status);
             return r.json();
@@ -190,7 +282,19 @@ function fetchLatest() {
             var lat = parseFloat(data.lat);
             var lon = parseFloat(data.lon);
             var newId = data.id;
+            var streamDevice = (data.device || '').trim();
             if (!isFinite(lat) || !isFinite(lon)) return;
+
+            if (!selectedDevice && streamDevice) {
+                if (!activeRealtimeStreamDevice) {
+                    activeRealtimeStreamDevice = streamDevice;
+                } else if (activeRealtimeStreamDevice !== streamDevice) {
+                    resetRealtimeRouteState('Se detectó cambio de vehículo en el stream. Ruta reiniciada para mantener consistencia.');
+                    activeRealtimeStreamDevice = streamDevice;
+                }
+            } else if (selectedDevice) {
+                activeRealtimeStreamDevice = selectedDevice;
+            }
 
             latestPosition = { lat: lat, lon: lon };
             updateRecenterButtonsState(true);
@@ -200,6 +304,7 @@ function fetchLatest() {
                 if (autoFollow) {
                     mapRT.panTo([lat, lon], { animate: true, duration: 0.5 });
                 }
+                renderRealtimePanels(data, lat, lon);
                 return;
             }
             lastKnownId = newId;
@@ -227,6 +332,7 @@ function fetchLatest() {
                 sessionPoints.push(currentPoint);
                 if (sessionPoints.length > RT_MAX_SESSION_POINTS) {
                     sessionPoints = sessionPoints.slice(sessionPoints.length - RT_MAX_SESSION_POINTS);
+                    rtOsrm.lastComputedCount = Math.min(rtOsrm.lastComputedCount, sessionPoints.length);
                 }
                 drawSessionRoute();
                 queueRealtimeStateSave();
@@ -237,26 +343,28 @@ function fetchLatest() {
         .catch(function() {
             backoffMultiplier = Math.min(backoffMultiplier * 2, MAX_BACKOFF);
             updateConnectionUi('Conexión inestable, reintentando...', false);
+        })
+        .finally(function() {
+            clearTimeout(fetchTimeoutId);
+            if (latestFetchController === controller) {
+                latestFetchController = null;
+            }
+            latestFetchInFlight = false;
         });
 }
 
 function resetRealtimeSessionForDevice(device) {
-    if (routeLineRT) {
-        mapRT.removeLayer(routeLineRT);
-        routeLineRT = null;
-    }
+    resetRealtimeRouteState('Ruta reiniciada para el nuevo filtro.');
+
     if (markerRT) {
         mapRT.removeLayer(markerRT);
         markerRT = null;
     }
 
-    sessionPoints = [];
     latestPosition = null;
     lastKnownId = null;
     firstPositionRT = true;
-
-    rtOsrm.cachedRoute = null;
-    rtOsrm.lastComputedCount = 0;
+    activeRealtimeStreamDevice = device || '';
 
     updateRecenterButtonsState(false);
 
@@ -266,11 +374,6 @@ function resetRealtimeSessionForDevice(device) {
             '<div class="no-data"><div class="no-data-icon">' + SVG_PIN_GREEN + '</div>Cargando posición del vehículo seleccionado...</div>';
     }
 
-    var routeInfo = document.getElementById('route-info');
-    if (routeInfo) {
-        routeInfo.innerHTML =
-            '<div class="no-data"><div class="no-data-icon">' + SVG_SEARCH + '</div>Ruta reiniciada para el nuevo filtro.</div>';
-    }
 }
 
 function renderRealtimePanels(data, lat, lon) {
@@ -318,9 +421,7 @@ function drawSessionRoute() {
     if (sessionPoints.length < 2) return;
 
     drawInterimRoute();
-
-    if (rtOsrm.timer) clearTimeout(rtOsrm.timer);
-    rtOsrm.timer = setTimeout(executeSessionOSRM, rtOsrm.DEBOUNCE);
+    scheduleSessionOSRM(false);
 }
 
 /**
@@ -331,9 +432,12 @@ function drawInterimRoute() {
 
     if (rtOsrm.cachedRoute && rtOsrm.cachedRoute.length > 1) {
         var latest = sessionPoints[sessionPoints.length - 1];
-        var combined = rtOsrm.cachedRoute.concat([latest]);
-        applyRouteToMap(combined, { color: '#5bb9ff', weight: 3.4, opacity: 0.86 });
-        return;
+        var tail = rtOsrm.lastRouteEnd || rtOsrm.cachedRoute[rtOsrm.cachedRoute.length - 1];
+        if (tail && haversineDistance(tail, latest) <= RT_OSRM_APPEND_MAX_METERS) {
+            var combined = rtOsrm.cachedRoute.concat([latest]);
+            applyRouteToMap(combined, { color: '#5bb9ff', weight: 3.4, opacity: 0.86 });
+            return;
+        }
     }
 
     var base = sessionPoints.length > 240 ? samplePoints(sessionPoints, 240) : sessionPoints.slice();
@@ -345,32 +449,76 @@ function drawInterimRoute() {
  * Execute OSRM route request for the session (debounced).
  */
 function executeSessionOSRM() {
-    if (rtOsrm.inFlight || sessionPoints.length < 2) return;
+    if (sessionPoints.length < 2) return;
 
-    // Skip expensive recalculation if only 1-2 points changed.
-    if (rtOsrm.cachedRoute && (sessionPoints.length - rtOsrm.lastComputedCount) < 4) {
+    if (rtOsrm.inFlight) {
+        rtOsrm.pending = true;
         return;
     }
 
-    var sampled = samplePoints(sessionPoints, 25);
+    var now = Date.now();
+    var pointsDelta = sessionPoints.length - rtOsrm.lastComputedCount;
+    var latest = sessionPoints[sessionPoints.length - 1];
+    var elapsed = now - rtOsrm.lastComputedAt;
+    var driftMeters = rtOsrm.lastRouteEnd && latest
+        ? haversineDistance(rtOsrm.lastRouteEnd, latest)
+        : Infinity;
+
+    var shouldRecompute = !rtOsrm.cachedRoute
+        || pointsDelta >= RT_OSRM_MIN_POINTS_DELTA
+        || elapsed >= RT_OSRM_FORCE_REFRESH_MS
+        || driftMeters >= RT_OSRM_DRIFT_REFRESH_METERS;
+
+    if (!shouldRecompute) return;
+
+    var sampled = samplePoints(sessionPoints, RT_OSRM_WAYPOINTS);
     var coords = sampled.map(function(p) { return p[1] + ',' + p[0]; }).join(';');
 
     rtOsrm.inFlight = true;
-    fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords))
+    rtOsrm.pending = false;
+
+    if (rtOsrm.controller) {
+        rtOsrm.controller.abort();
+    }
+    var controller = new AbortController();
+    rtOsrm.controller = controller;
+    var timeoutId = setTimeout(function() {
+        controller.abort();
+    }, RT_OSRM_TIMEOUT_MS);
+
+    fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords), { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            rtOsrm.inFlight = false;
+            rtOsrm.lastComputedAt = Date.now();
 
             if (data.ok && data.geometry) {
                 var rc = data.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
-                rtOsrm.cachedRoute = rc;
-                rtOsrm.lastComputedCount = sessionPoints.length;
-                applyRouteToMap(rc, { color: '#5bb9ff', weight: 3.4, opacity: 0.88 });
+                if (rc.length > 1) {
+                    rtOsrm.cachedRoute = rc;
+                    rtOsrm.lastComputedCount = sessionPoints.length;
+                    rtOsrm.lastRouteEnd = rc[rc.length - 1];
+                    applyRouteToMap(rc, { color: '#5bb9ff', weight: 3.4, opacity: 0.88 });
+                }
             }
             // If OSRM failed, fallback spline already visible.
         })
-        .catch(function() {
+        .catch(function(err) {
+            if (err && err.name === 'AbortError') {
+                // Timeout or cancellation: keep fallback and try again soon if needed.
+            }
+            rtOsrm.lastComputedAt = Date.now();
+        })
+        .finally(function() {
+            clearTimeout(timeoutId);
+            if (rtOsrm.controller === controller) {
+                rtOsrm.controller = null;
+            }
             rtOsrm.inFlight = false;
+
+            if (rtOsrm.pending) {
+                rtOsrm.pending = false;
+                scheduleSessionOSRM(true);
+            }
         });
 }
 
@@ -397,6 +545,7 @@ function saveRealtimeState() {
             lastKnownId: lastKnownId,
             latestPosition: latestPosition,
             points: snapshotPoints,
+            device: getRealtimeDeviceFilter() || activeRealtimeStreamDevice || '',
             center: center ? { lat: center.lat, lon: center.lng } : null,
             zoom: zoom
         }));
@@ -412,12 +561,15 @@ function loadRealtimeState() {
 
         var cache = JSON.parse(raw);
         if (!cache.savedAt) return;
+        var selectedDevice = getRealtimeDeviceFilter();
+        if (selectedDevice && (cache.device || '') !== selectedDevice) return;
 
         var age = Date.now() - new Date(cache.savedAt).getTime();
         if (age > RT_CACHE_TTL_MS) return;
 
         sessionStartTime = cache.sessionStartTime || sessionStartTime;
         lastKnownId = cache.lastKnownId || lastKnownId;
+        activeRealtimeStreamDevice = cache.device || activeRealtimeStreamDevice;
 
         if (Array.isArray(cache.points) && cache.points.length > 1) {
             sessionPoints = cache.points.filter(function(p) {
@@ -427,7 +579,12 @@ function loadRealtimeState() {
             });
 
             drawInterimRoute();
-            renderRealtimePanels({ timestamp: 'Caché local', device: '—' }, sessionPoints[sessionPoints.length - 1][0], sessionPoints[sessionPoints.length - 1][1]);
+            scheduleSessionOSRM(true);
+            renderRealtimePanels(
+                { timestamp: 'Caché local', device: activeRealtimeStreamDevice || '—' },
+                sessionPoints[sessionPoints.length - 1][0],
+                sessionPoints[sessionPoints.length - 1][1]
+            );
         }
 
         if (cache.latestPosition && isFinite(cache.latestPosition.lat) && isFinite(cache.latestPosition.lon)) {

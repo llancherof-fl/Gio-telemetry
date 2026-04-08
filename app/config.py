@@ -24,6 +24,8 @@ class Config:
     DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
     DB_NAME = os.environ.get('DB_NAME', 'telemetry')
     DB_PORT = int(os.environ.get('DB_PORT', 5432))
+    DB_POOL_MIN = int(os.environ.get('DB_POOL_MIN', 2))
+    DB_POOL_MAX = int(os.environ.get('DB_POOL_MAX', 10))
 
     DB_CONFIG = {
         'host': DB_HOST,
@@ -46,4 +48,13 @@ class Config:
     HISTORY_RANGE_MAX = int(os.environ.get('HISTORY_RANGE_MAX', 5000))
     HISTORY_SAMPLE_MINUTES_DEFAULT = int(os.environ.get('HISTORY_SAMPLE_MINUTES_DEFAULT', 3))
     HISTORY_SAMPLE_MINUTES_MAX = int(os.environ.get('HISTORY_SAMPLE_MINUTES_MAX', 15))
+    HISTORY_OUTLIER_MAX_SPEED_KMH = float(os.environ.get('HISTORY_OUTLIER_MAX_SPEED_KMH', 240))
+    HISTORY_OUTLIER_MIN_JUMP_KM = float(os.environ.get('HISTORY_OUTLIER_MIN_JUMP_KM', 5))
+    DEVICES_CACHE_TTL = int(os.environ.get('DEVICES_CACHE_TTL', 45))
     STATS_CACHE_INTERVAL = 30  # seconds
+
+    # ── UDP ingestion (queue + batch write) ──
+    UDP_QUEUE_MAX = int(os.environ.get('UDP_QUEUE_MAX', 20000))
+    UDP_BATCH_SIZE = int(os.environ.get('UDP_BATCH_SIZE', 120))
+    UDP_FLUSH_MS = int(os.environ.get('UDP_FLUSH_MS', 200))
+    UDP_LOG_EVERY = int(os.environ.get('UDP_LOG_EVERY', 500))
