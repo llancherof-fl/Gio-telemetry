@@ -41,7 +41,9 @@ def init_db():
 def init_pool():
     """Initialize the threaded connection pool."""
     global _pool
-    _pool = psycopg2.pool.ThreadedConnectionPool(2, 10, **Config.DB_CONFIG)
+    min_conn = max(1, Config.DB_POOL_MIN)
+    max_conn = max(min_conn, Config.DB_POOL_MAX)
+    _pool = psycopg2.pool.ThreadedConnectionPool(min_conn, max_conn, **Config.DB_CONFIG)
     print("[DB] Pool de conexiones inicializado.")
 
 
@@ -55,16 +57,24 @@ def release_conn(conn):
     _pool.putconn(conn)
 
 
+def _to_colombia_time(raw_ts):
+    """Convert raw timestamp millis to UTC-5 naive datetime, with safe fallback."""
+    try:
+        ts_ms = int(raw_ts)
+        if ts_ms <= 0:
+            raise ValueError()
+        return datetime.datetime.utcfromtimestamp(ts_ms / 1000) - datetime.timedelta(hours=5)
+    except (ValueError, TypeError, OverflowError):
+        return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
+
+
 # ══════════════════════════════════════════
 #  DATA OPERATIONS
 # ══════════════════════════════════════════
 
 def insert_data(lat, lon, device, raw_ts):
     """Insert a new GPS coordinate into the database."""
-    colombia_time = (
-        datetime.datetime.utcfromtimestamp(raw_ts / 1000)
-        - datetime.timedelta(hours=5)
-    )
+    colombia_time = _to_colombia_time(raw_ts)
     conn = get_conn()
     try:
         c = conn.cursor()
@@ -73,6 +83,52 @@ def insert_data(lat, lon, device, raw_ts):
             (colombia_time, lat, lon, device, raw_ts),
         )
         conn.commit()
+    finally:
+        release_conn(conn)
+
+
+def insert_data_batch(rows):
+    """Insert many GPS rows in a single transaction. Returns inserted count."""
+    if not rows:
+        return 0
+
+    values = []
+    for lat, lon, device, raw_ts in rows:
+        try:
+            lat_f = float(lat)
+            lon_f = float(lon)
+        except (ValueError, TypeError):
+            continue
+
+        try:
+            raw_ts_i = int(raw_ts)
+        except (ValueError, TypeError):
+            raw_ts_i = 0
+
+        values.append((
+            _to_colombia_time(raw_ts_i),
+            lat_f,
+            lon_f,
+            (device or 'Desconocido')[:100],
+            raw_ts_i,
+        ))
+
+    if not values:
+        return 0
+
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        psycopg2.extras.execute_values(
+            c,
+            '''INSERT INTO coordinates (timestamp, lat, lon, device, raw_ts)
+               VALUES %s''',
+            values,
+            template='(%s, %s, %s, %s, %s)',
+            page_size=1000,
+        )
+        conn.commit()
+        return len(values)
     finally:
         release_conn(conn)
 
