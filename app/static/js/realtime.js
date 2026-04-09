@@ -13,6 +13,7 @@ var lastKnownId = null;
 var latestPosition = null;
 
 var RT_CACHE_KEY = 'gio_rt_state_v2';
+var RT_ROUTE_METHOD_KEY = 'gio_rt_route_method_v1';
 var RT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 var RT_CACHE_MAX_POINTS = 260;
 var RT_MAX_SESSION_POINTS = 700;
@@ -40,6 +41,8 @@ var autoFollow = true;
 var followUiLockUntil = 0;
 var lastRealtimeDevice = '';
 var activeRealtimeStreamDevice = '';
+var rtRouteMethod = 'route';
+var rtRouteMethodReady = false;
 
 // ── OSRM debounce state for real-time ──
 var rtOsrm = {
@@ -92,6 +95,7 @@ function initRealtime() {
         }
     });
 
+    initRealtimeRouteMethod();
     updateFollowUi();
     startPolling();
     startRtOsrmWatchdog();
@@ -149,6 +153,52 @@ function getRealtimeDeviceFilter() {
     var select = document.getElementById('device-select');
     if (!select) return '';
     return (select.value || '').trim();
+}
+
+function normalizeRouteMethod(value) {
+    return value === 'match' ? 'match' : 'route';
+}
+
+function getRealtimeRouteMethod() {
+    return normalizeRouteMethod(rtRouteMethod);
+}
+
+function initRealtimeRouteMethod() {
+    var select = document.getElementById('rt-route-method');
+    if (!select) return;
+
+    try {
+        var saved = localStorage.getItem(RT_ROUTE_METHOD_KEY);
+        rtRouteMethod = normalizeRouteMethod(saved || select.value || 'route');
+    } catch (e) {
+        rtRouteMethod = normalizeRouteMethod(select.value || 'route');
+    }
+
+    select.value = rtRouteMethod;
+    if (rtRouteMethodReady) return;
+
+    select.addEventListener('change', function() {
+        var nextMethod = normalizeRouteMethod(select.value);
+        if (nextMethod === rtRouteMethod) return;
+
+        rtRouteMethod = nextMethod;
+        try {
+            localStorage.setItem(RT_ROUTE_METHOD_KEY, rtRouteMethod);
+        } catch (e) {
+            // ignore storage limits
+        }
+
+        rtOsrm.cachedRoute = null;
+        rtOsrm.lastRouteEnd = null;
+        rtOsrm.lastComputedCount = 0;
+        rtOsrm.lastComputedAt = 0;
+        rtOsrm.lastRequestCoords = '';
+        clearRouteBridge();
+        drawInterimRoute();
+        scheduleSessionOSRM(true);
+        showToast('Método de ruta actualizado: ' + (rtRouteMethod === 'match' ? 'Match' : 'Route'));
+    });
+    rtRouteMethodReady = true;
 }
 
 function updateConnectionUi(label, online) {
@@ -591,6 +641,7 @@ function renderRealtimePanels(data, lat, lon) {
     var routeInfo = document.getElementById('route-info');
     var osrmStatus = getRtOsrmStatusLabel();
     var osrmCalls = rtOsrmReqTotal > 0 ? (rtOsrmReqOk + '/' + rtOsrmReqTotal) : '—';
+    var methodLabel = getRealtimeRouteMethod() === 'match' ? 'Match' : 'Route';
 
     if (livePanel) {
         livePanel.innerHTML =
@@ -612,7 +663,11 @@ function renderRealtimePanels(data, lat, lon) {
             '</div>' +
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">OSRM</div><div class="val" style="font-size:0.72rem">' + osrmStatus + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Método</div><div class="val">' + methodLabel + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">Llamadas</div><div class="val">' + osrmCalls + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Modo</div><div class="val">Tiempo real</div></div>' +
             '</div>' +
             '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
     }
@@ -705,6 +760,8 @@ function executeSessionOSRM() {
 
     var sampled = samplePoints(activeSegment, RT_OSRM_WAYPOINTS);
     var coords = sampled.map(function(p) { return p[1] + ',' + p[0]; }).join(';');
+    var method = getRealtimeRouteMethod();
+    var requestSignature = method + '|' + coords;
     var requestPointCount = activeCount;
 
     if (
@@ -716,13 +773,13 @@ function executeSessionOSRM() {
         return;
     }
 
-    if (rtOsrm.cachedRoute && coords === rtOsrm.lastRequestCoords && elapsed < RT_OSRM_FORCE_REFRESH_MS) {
+    if (rtOsrm.cachedRoute && requestSignature === rtOsrm.lastRequestCoords && elapsed < RT_OSRM_FORCE_REFRESH_MS) {
         return;
     }
 
     rtOsrm.inFlight = true;
     rtOsrm.pending = false;
-    rtOsrm.lastRequestCoords = coords;
+    rtOsrm.lastRequestCoords = requestSignature;
     rtOsrmReqTotal += 1;
     rtOsrmLastAttemptAt = Date.now();
 
@@ -735,7 +792,7 @@ function executeSessionOSRM() {
         controller.abort();
     }, RT_OSRM_TIMEOUT_MS);
 
-    fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords), { signal: controller.signal })
+    fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords) + '&method=' + encodeURIComponent(method), { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             rtOsrm.lastComputedAt = Date.now();
@@ -820,6 +877,7 @@ function saveRealtimeState() {
 
 function loadRealtimeState() {
     try {
+        initRealtimeRouteMethod();
         var raw = localStorage.getItem(RT_CACHE_KEY);
         if (!raw) return;
 

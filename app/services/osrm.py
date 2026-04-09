@@ -19,13 +19,22 @@ class OSRMProxy:
         self._cache = {}  # key -> { data, timestamp }
         self._lock = threading.Lock()
 
-    def get_route(self, coords_string):
+    @staticmethod
+    def normalize_method(method):
+        safe = (method or 'route').strip().lower()
+        if safe not in ('route', 'match'):
+            return 'route'
+        return safe
+
+    def get_route(self, coords_string, method='route'):
         """
-        Get a driving route for the given coordinates string.
+        Get an OSRM route/match for the given coordinates string.
         coords_string: "lon1,lat1;lon2,lat2;..."
+        method: "route" or "match"
         Returns: dict with OSRM response or None on failure.
         """
-        cache_key = self._make_key(coords_string)
+        safe_method = self.normalize_method(method)
+        cache_key = self._make_key(coords_string, safe_method)
 
         # Check cache
         with self._lock:
@@ -34,7 +43,13 @@ class OSRMProxy:
                 return cached['data']
 
         # Fetch from OSRM
-        url = f"{self._base_url}/route/v1/driving/{coords_string}?overview=full&geometries=geojson"
+        if safe_method == 'match':
+            url = (
+                f"{self._base_url}/match/v1/driving/{coords_string}"
+                "?overview=full&geometries=geojson&gaps=ignore&tidy=true"
+            )
+        else:
+            url = f"{self._base_url}/route/v1/driving/{coords_string}?overview=full&geometries=geojson"
         try:
             resp = requests.get(url, timeout=8)
             resp.raise_for_status()
@@ -54,9 +69,9 @@ class OSRMProxy:
             print(f"[OSRM] Error: {e}")
             return None
 
-    def _make_key(self, coords_string):
-        """Create a cache key from coordinates (hash for memory efficiency)."""
-        return hashlib.md5(coords_string.encode()).hexdigest()
+    def _make_key(self, coords_string, method):
+        """Create a cache key from method+coordinates."""
+        return hashlib.md5(f"{method}|{coords_string}".encode()).hexdigest()
 
     def _evict_if_needed(self):
         """Evict oldest entries if cache is full. Must be called with lock held."""
