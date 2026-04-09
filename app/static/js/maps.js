@@ -141,6 +141,207 @@ function fetchOSRMRoute(points, options) {
         });
 }
 
+function dedupeConsecutivePoints(points, minDistanceMeters) {
+    if (!points || points.length < 2) return points ? points.slice() : [];
+
+    var thresholdKm = Math.max(0, Number(minDistanceMeters || 0)) / 1000;
+    var out = [points[0]];
+
+    for (var i = 1; i < points.length; i++) {
+        var prev = out[out.length - 1];
+        var curr = points[i];
+        if (thresholdKm > 0 && distanceKm(prev, curr) <= thresholdKm) {
+            continue;
+        }
+        out.push(curr);
+    }
+
+    if (out.length === 1 && points.length > 1) {
+        out.push(points[points.length - 1]);
+    }
+
+    return out;
+}
+
+function buildWaypointChunks(points, maxWaypoints, overlap) {
+    if (!points || points.length < 2) return [];
+    if (points.length <= maxWaypoints) return [points.slice()];
+
+    var safeOverlap = Math.max(1, Math.min(maxWaypoints - 1, overlap || 1));
+    var chunks = [];
+    var start = 0;
+
+    while (start < (points.length - 1)) {
+        var end = Math.min(points.length, start + maxWaypoints);
+        var chunk = points.slice(start, end);
+        if (chunk.length > 1) {
+            chunks.push(chunk);
+        }
+        if (end >= points.length) {
+            break;
+        }
+        start = end - safeOverlap;
+    }
+
+    return chunks;
+}
+
+function limitChunkCount(points, maxWaypoints, overlap, maxChunks) {
+    var chunks = buildWaypointChunks(points, maxWaypoints, overlap);
+    if (!maxChunks || chunks.length <= maxChunks) {
+        return { points: points, chunks: chunks };
+    }
+
+    var targetPoints = maxWaypoints + Math.max(0, maxChunks - 1) * (maxWaypoints - Math.max(1, overlap || 1));
+    var sampled = samplePoints(points, Math.max(maxWaypoints, targetPoints));
+    return {
+        points: sampled,
+        chunks: buildWaypointChunks(sampled, maxWaypoints, overlap)
+    };
+}
+
+function mergeRoutePaths(paths) {
+    if (!paths || !paths.length) return [];
+    var merged = [];
+    var joinThresholdKm = 0.03; // 30 meters
+
+    for (var i = 0; i < paths.length; i++) {
+        var path = paths[i];
+        if (!path || path.length < 2) continue;
+
+        if (!merged.length) {
+            merged = path.slice();
+            continue;
+        }
+
+        var prev = merged[merged.length - 1];
+        var first = path[0];
+        if (distanceKm(prev, first) <= joinThresholdKm) {
+            merged = merged.concat(path.slice(1));
+        } else {
+            merged = merged.concat(path);
+        }
+    }
+
+    return merged;
+}
+
+function buildFallbackRoute(points, maxJumpKm) {
+    var safeSegments = splitByLargeJumps(points, maxJumpKm);
+    if (!safeSegments.length) {
+        safeSegments = [points];
+    }
+
+    var smoothed = safeSegments
+        .map(function(segment) {
+            return smoothPath(segment, {
+                epsilon: 0.00003,
+                segments: 8,
+                tension: 0.45
+            });
+        })
+        .filter(function(segment) {
+            return segment && segment.length > 1;
+        });
+
+    if (!smoothed.length) return null;
+    if (smoothed.length === 1) return smoothed[0];
+    return smoothed;
+}
+
+function fetchSegmentRouteChunked(segment, opts) {
+    var maxWaypoints = Math.max(2, Math.min(25, Number(opts.chunkWaypoints || 25)));
+    var overlap = Math.max(1, Math.min(maxWaypoints - 1, Number(opts.chunkOverlap || 1)));
+    var maxChunksPerSegment = Math.max(1, Number(opts.maxChunksPerSegment || 8));
+    var bounded = limitChunkCount(segment, maxWaypoints, overlap, maxChunksPerSegment);
+    var chunks = bounded.chunks;
+
+    if (!chunks.length) {
+        return Promise.resolve(null);
+    }
+
+    var paths = [];
+    var idx = 0;
+
+    function processChunk() {
+        if (opts.signal && opts.signal.aborted) {
+            return Promise.resolve(null);
+        }
+        if (idx >= chunks.length) {
+            if (!paths.length) return Promise.resolve(null);
+            return Promise.resolve(mergeRoutePaths(paths));
+        }
+
+        var chunk = chunks[idx++];
+        return fetchOSRMRoute(chunk, opts).then(function(route) {
+            if (route && route.length > 1) {
+                paths.push(route);
+            } else {
+                var fallbackChunk = smoothPath(chunk, { segments: 6, tension: 0.42 });
+                if (fallbackChunk && fallbackChunk.length > 1) {
+                    paths.push(fallbackChunk);
+                }
+            }
+            return processChunk();
+        });
+    }
+
+    return processChunk();
+}
+
+function fetchSegmentedRoute(points, options) {
+    var opts = options || {};
+    if (!points || points.length < 2) return Promise.resolve(null);
+    if (opts.signal && opts.signal.aborted) return Promise.resolve(null);
+
+    var maxJumpKm = Math.max(20, Number(opts.maxJumpKm || 120));
+    var maxInputPoints = Math.max(40, Number(opts.maxInputPoints || 220));
+    var minPointDistanceMeters = Math.max(0, Number(opts.minPointDistanceMeters || 2));
+
+    var prepared = dedupeConsecutivePoints(points, minPointDistanceMeters);
+    if (prepared.length > maxInputPoints) {
+        prepared = samplePoints(prepared, maxInputPoints);
+    }
+
+    var segments = splitByLargeJumps(prepared, maxJumpKm).filter(function(segment) {
+        return segment && segment.length > 1;
+    });
+    if (!segments.length && prepared.length > 1) {
+        segments = [prepared];
+    }
+    if (!segments.length) {
+        return Promise.resolve(null);
+    }
+
+    var routedSegments = [];
+    var segIdx = 0;
+
+    function processSegment() {
+        if (opts.signal && opts.signal.aborted) {
+            return Promise.resolve(null);
+        }
+        if (segIdx >= segments.length) {
+            if (!routedSegments.length) return Promise.resolve(null);
+            if (routedSegments.length === 1) return Promise.resolve(routedSegments[0]);
+            return Promise.resolve(routedSegments);
+        }
+
+        var segment = segments[segIdx++];
+        var routePromise = opts.chunked
+            ? fetchSegmentRouteChunked(segment, opts)
+            : fetchOSRMRoute(segment, opts);
+
+        return routePromise.then(function(route) {
+            if (route && route.length > 1) {
+                routedSegments.push(route);
+            }
+            return processSegment();
+        });
+    }
+
+    return processSegment();
+}
+
 /**
  * Draw a polyline on a map with OSRM route or spline fallback.
  * Returns a promise that resolves with the Leaflet polyline.
@@ -153,7 +354,7 @@ function fetchOSRMRoute(points, options) {
  */
 function drawSmartRoute(map, points, style, options) {
     var opts = options || {};
-    var maxJumpKm = Math.max(40, Number(opts.maxJumpKm || 350));
+    var maxJumpKm = Math.max(20, Number(opts.maxJumpKm || 120));
     var defaultStyle = {
         color: '#748ffc',
         weight: 3.5,
@@ -168,15 +369,9 @@ function drawSmartRoute(map, points, style, options) {
         return Promise.resolve(null);
     }
 
-    var segments = splitByLargeJumps(points, maxJumpKm);
-    var osrmInput = points;
-    if (segments.length > 1) {
-        osrmInput = segments.reduce(function(best, segment) {
-            return segment.length > best.length ? segment : best;
-        }, segments[0]);
-    }
+    var routeOpts = Object.assign({}, opts, { maxJumpKm: maxJumpKm });
 
-    return fetchOSRMRoute(osrmInput, opts).then(function(osrmRoute) {
+    return fetchSegmentedRoute(points, routeOpts).then(function(osrmRoute) {
         if (opts.signal && opts.signal.aborted) {
             return null;
         }
@@ -186,34 +381,29 @@ function drawSmartRoute(map, points, style, options) {
             // OSRM success — use real road route
             drawPoints = osrmRoute;
         } else {
-            // OSRM failed — use Catmull-Rom spline fallback
-            var base = points.length > 450 ? samplePoints(points, 450) : points;
-            var safeSegments = splitByLargeJumps(base, maxJumpKm);
-            if (!safeSegments.length) {
-                safeSegments = [base];
+            // OSRM failed — use segmented Catmull-Rom spline fallback
+            var base = points.length > 450 ? samplePoints(points, 450) : points.slice();
+            drawPoints = buildFallbackRoute(base, maxJumpKm);
+        }
+
+        var isMulti = Array.isArray(drawPoints)
+            && drawPoints.length
+            && Array.isArray(drawPoints[0])
+            && Array.isArray(drawPoints[0][0]);
+
+        if (isMulti) {
+            drawPoints = drawPoints.filter(function(segment) {
+                return Array.isArray(segment) && segment.length > 1;
+            });
+            if (!drawPoints.length) {
+                return null;
             }
-
-            var smoothed = safeSegments
-                .map(function(segment) {
-                    return smoothPath(segment, {
-                        epsilon: 0.00003,
-                        segments: 8,
-                        tension: 0.45
-                    });
-                })
-                .filter(function(segment) {
-                    return segment && segment.length > 1;
-                });
-
-            if (smoothed.length === 1) {
-                drawPoints = smoothed[0];
-            } else {
-                drawPoints = smoothed;
+        } else {
+            if (!drawPoints || drawPoints.length < 2) {
+                return null;
             }
         }
-        if (!drawPoints || drawPoints.length < 2) {
-            return null;
-        }
+
         return L.polyline(drawPoints, mergedStyle).addTo(map);
     });
 }

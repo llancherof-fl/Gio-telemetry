@@ -5,6 +5,7 @@
 
 var markerRT = null;
 var routeLineRT = null;
+var routeBridgeRT = null;
 var firstPositionRT = true;
 var sessionPoints = [];
 var sessionStartTime = new Date().toLocaleTimeString('es-CO');
@@ -26,6 +27,8 @@ var RT_OSRM_APPEND_MAX_METERS = 120;
 var RT_OSRM_STALE_POINTS_THRESHOLD = 8;
 var RT_OSRM_MIN_RECOMPUTE_MS = 3200;
 var RT_OSRM_DENSE_POINTS_DELTA = 6;
+var RT_OSRM_BRIDGE_MAX_METERS = 2200;
+var RT_OSRM_WATCHDOG_MS = 5500;
 var RT_ROUTE_SEGMENT_MAX_JUMP_KM = 50;
 var RT_INTERIM_DIRECT_MAX_KM = 8;
 var RT_FETCH_TIMEOUT_MS = 6000;
@@ -64,6 +67,13 @@ var latestFetchInFlight = false;
 var latestFetchController = null;
 var lastPointTimestampMs = null;
 var lastTeleportToastAt = 0;
+var rtOsrmWatchdogTimer = null;
+var rtLastPointPushedAt = 0;
+var rtOsrmReqTotal = 0;
+var rtOsrmReqOk = 0;
+var rtOsrmReqFail = 0;
+var rtOsrmLastAttemptAt = 0;
+var rtOsrmLastSuccessAt = 0;
 
 /**
  * Initialize real-time polling with visibility detection and map interaction hooks.
@@ -84,6 +94,7 @@ function initRealtime() {
 
     updateFollowUi();
     startPolling();
+    startRtOsrmWatchdog();
 }
 
 function onRealtimeMapInteraction() {
@@ -108,6 +119,21 @@ function startPolling() {
 function stopPolling() {
     if (pollTimer) clearTimeout(pollTimer);
     pollTimer = null;
+}
+
+function startRtOsrmWatchdog() {
+    stopRtOsrmWatchdog();
+    rtOsrmWatchdogTimer = setInterval(function() {
+        if (document.hidden) return;
+        maybeRecoverSessionOSRM();
+    }, RT_OSRM_WATCHDOG_MS);
+}
+
+function stopRtOsrmWatchdog() {
+    if (rtOsrmWatchdogTimer) {
+        clearInterval(rtOsrmWatchdogTimer);
+        rtOsrmWatchdogTimer = null;
+    }
 }
 
 /**
@@ -283,10 +309,35 @@ function scheduleSessionOSRM(forceFast) {
     }, Math.max(250, delay));
 }
 
+function maybeRecoverSessionOSRM() {
+    if (sessionPoints.length < 2) return;
+    if (rtOsrm.inFlight || rtOsrm.timer) return;
+
+    var now = Date.now();
+    var sinceAttempt = rtOsrmLastAttemptAt ? (now - rtOsrmLastAttemptAt) : Infinity;
+    if (sinceAttempt < 1000) return;
+
+    var sincePush = rtLastPointPushedAt ? (now - rtLastPointPushedAt) : Infinity;
+    var sinceComputed = rtOsrm.lastComputedAt ? (now - rtOsrm.lastComputedAt) : Infinity;
+
+    if (!rtOsrm.cachedRoute) {
+        scheduleSessionOSRM(true);
+        return;
+    }
+
+    if (sincePush <= 90000 && sinceComputed > (RT_OSRM_FORCE_REFRESH_MS + 2500)) {
+        scheduleSessionOSRM(true);
+    }
+}
+
 function resetRealtimeRouteState(message) {
     if (routeLineRT) {
         mapRT.removeLayer(routeLineRT);
         routeLineRT = null;
+    }
+    if (routeBridgeRT) {
+        mapRT.removeLayer(routeBridgeRT);
+        routeBridgeRT = null;
     }
 
     sessionPoints = [];
@@ -311,6 +362,12 @@ function resetRealtimeRouteState(message) {
     rtOsrm.lastRouteEnd = null;
     rtOsrm.lastRequestCoords = '';
     lastPointTimestampMs = null;
+    rtLastPointPushedAt = 0;
+    rtOsrmReqTotal = 0;
+    rtOsrmReqOk = 0;
+    rtOsrmReqFail = 0;
+    rtOsrmLastAttemptAt = 0;
+    rtOsrmLastSuccessAt = 0;
 
     var routeInfo = document.getElementById('route-info');
     if (routeInfo) {
@@ -385,6 +442,7 @@ function fetchLatest() {
                 if (autoFollow) {
                     mapRT.panTo([lat, lon], { animate: true, duration: 0.5 });
                 }
+                maybeRecoverSessionOSRM();
                 renderRealtimePanels(data, lat, lon);
                 return;
             }
@@ -415,6 +473,7 @@ function fetchLatest() {
                 var plausibility = isPlausibleRealtimePoint(currentPoint, currentTsMs);
                 if (!plausibility.ok) {
                     maybeShowTeleportToast();
+                    maybeRecoverSessionOSRM();
                     renderRealtimePanels(data, lat, lon);
                     return;
                 }
@@ -427,6 +486,7 @@ function fetchLatest() {
                 }
 
                 sessionPoints.push(currentPoint);
+                rtLastPointPushedAt = Date.now();
                 if (currentTsMs) {
                     lastPointTimestampMs = currentTsMs;
                 }
@@ -438,6 +498,7 @@ function fetchLatest() {
                 queueRealtimeStateSave();
             }
 
+            maybeRecoverSessionOSRM();
             renderRealtimePanels(data, lat, lon);
         })
         .catch(function() {
@@ -476,9 +537,60 @@ function resetRealtimeSessionForDevice(device) {
 
 }
 
+function clearRouteBridge() {
+    if (!routeBridgeRT || !mapRT) return;
+    mapRT.removeLayer(routeBridgeRT);
+    routeBridgeRT = null;
+}
+
+function applyRouteBridge(tail, latest) {
+    if (!tail || !latest || !mapRT) {
+        clearRouteBridge();
+        return;
+    }
+
+    var drift = haversineDistance(tail, latest);
+    if (!isFinite(drift) || drift > RT_OSRM_BRIDGE_MAX_METERS) {
+        clearRouteBridge();
+        return;
+    }
+
+    var segment = [tail, latest];
+    if (!routeBridgeRT) {
+        routeBridgeRT = L.polyline(segment, {
+            color: '#7cc4ff',
+            weight: 2.2,
+            opacity: 0.8,
+            dashArray: '7 6'
+        }).addTo(mapRT);
+        return;
+    }
+
+    routeBridgeRT.setLatLngs(segment);
+}
+
+function getRtOsrmStatusLabel() {
+    if (rtOsrm.inFlight) {
+        return 'Calculando...';
+    }
+    if (sessionPoints.length < 2) {
+        return 'Esperando puntos';
+    }
+    if (rtOsrm.cachedRoute && rtOsrm.lastComputedAt) {
+        var ageSec = Math.max(0, Math.round((Date.now() - rtOsrm.lastComputedAt) / 1000));
+        return 'OK · ' + ageSec + 's · ' + rtOsrmReqOk + '/' + rtOsrmReqTotal;
+    }
+    if (rtOsrmReqTotal > 0) {
+        return 'Fallback · ' + rtOsrmReqFail + ' fallos';
+    }
+    return 'Fallback';
+}
+
 function renderRealtimePanels(data, lat, lon) {
     var livePanel = document.getElementById('live-panel');
     var routeInfo = document.getElementById('route-info');
+    var osrmStatus = getRtOsrmStatusLabel();
+    var osrmCalls = rtOsrmReqTotal > 0 ? (rtOsrmReqOk + '/' + rtOsrmReqTotal) : '—';
 
     if (livePanel) {
         livePanel.innerHTML =
@@ -497,6 +609,10 @@ function renderRealtimePanels(data, lat, lon) {
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">Puntos sesión</div><div class="val">' + sessionPoints.length + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Inicio sesión</div><div class="val" style="font-size:0.74rem">' + sessionStartTime + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">OSRM</div><div class="val" style="font-size:0.72rem">' + osrmStatus + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Llamadas</div><div class="val">' + osrmCalls + '</div></div>' +
             '</div>' +
             '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
     }
@@ -534,16 +650,13 @@ function drawInterimRoute() {
     if (rtOsrm.cachedRoute && rtOsrm.cachedRoute.length > 1) {
         var latest = sessionPoints[sessionPoints.length - 1];
         var tail = rtOsrm.lastRouteEnd || rtOsrm.cachedRoute[rtOsrm.cachedRoute.length - 1];
-        if (tail && haversineDistance(tail, latest) <= RT_OSRM_APPEND_MAX_METERS) {
-            var combined = rtOsrm.cachedRoute.concat([latest]);
-            applyRouteToMap(combined, { color: '#5bb9ff', weight: 3.4, opacity: 0.86 });
-        } else {
-            // Keep the last valid OSRM route visible while a new calculation is pending.
-            // This avoids drawing a temporary global fallback chord over long-distance routes.
-            applyRouteToMap(rtOsrm.cachedRoute, { color: '#5bb9ff', weight: 3.4, opacity: 0.86 });
-        }
+        // Keep the last valid OSRM route visible while a new calculation is pending.
+        applyRouteToMap(rtOsrm.cachedRoute, { color: '#5bb9ff', weight: 3.4, opacity: 0.86 });
+        applyRouteBridge(tail, latest);
         return;
     }
+
+    clearRouteBridge();
 
     var base = activeSegment.length > 240 ? samplePoints(activeSegment, 240) : activeSegment.slice();
     if (base.length === 2 && distanceKm(base[0], base[1]) > RT_INTERIM_DIRECT_MAX_KM) {
@@ -610,6 +723,8 @@ function executeSessionOSRM() {
     rtOsrm.inFlight = true;
     rtOsrm.pending = false;
     rtOsrm.lastRequestCoords = coords;
+    rtOsrmReqTotal += 1;
+    rtOsrmLastAttemptAt = Date.now();
 
     if (rtOsrm.controller) {
         rtOsrm.controller.abort();
@@ -637,14 +752,22 @@ function executeSessionOSRM() {
                     rtOsrm.cachedRoute = rc;
                     rtOsrm.lastComputedCount = requestPointCount;
                     rtOsrm.lastRouteEnd = rc[rc.length - 1];
+                    rtOsrmReqOk += 1;
+                    rtOsrmLastSuccessAt = Date.now();
                     applyRouteToMap(rc, { color: '#5bb9ff', weight: 3.4, opacity: 0.88 });
+                    clearRouteBridge();
+                    return;
                 }
             }
-            // If OSRM failed, fallback spline already visible.
+            rtOsrmReqFail += 1;
+            // If OSRM failed, fallback/bridge stays visible.
         })
         .catch(function(err) {
             if (err && err.name === 'AbortError') {
                 // Timeout or cancellation: keep fallback and try again soon if needed.
+                rtOsrmReqFail += 1;
+            } else {
+                rtOsrmReqFail += 1;
             }
             rtOsrm.lastComputedAt = Date.now();
         })
@@ -719,6 +842,7 @@ function loadRealtimeState() {
             }).map(function(p) {
                 return [parseFloat(p[0]), parseFloat(p[1])];
             });
+            rtLastPointPushedAt = Date.now();
 
             drawInterimRoute();
             scheduleSessionOSRM(true);
