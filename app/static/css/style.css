@@ -109,6 +109,7 @@ body {
     border-color: rgba(91, 185, 255, 0.34);
     background: var(--blue-soft);
     color: var(--blue-strong);
+    cursor: default;
 }
 
 .nav-meta {
@@ -263,6 +264,10 @@ body {
     padding: 5px 8px;
     color: var(--text-secondary);
     font-size: 0.72rem;
+}
+
+.sample-custom[hidden] {
+    display: none !important;
 }
 
 .sample-custom input {

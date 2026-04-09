@@ -170,6 +170,21 @@ def _downsample_rows(rows, sample_minutes):
     return deduped
 
 
+def _merge_line_coords(lines):
+    merged = []
+    for line in lines:
+        if not line or len(line) < 2:
+            continue
+        if not merged:
+            merged.extend(line)
+            continue
+        if merged[-1] == line[0]:
+            merged.extend(line[1:])
+        else:
+            merged.extend(line)
+    return merged
+
+
 # ══════════════════════════════════════════
 #  HEALTH & DIAGNOSTICS
 # ══════════════════════════════════════════
@@ -353,25 +368,59 @@ def api_stats():
 @api_bp.route('/api/osrm-proxy')
 def osrm_proxy():
     """
-    Proxy OSRM route requests through our backend.
+    Proxy OSRM route/match requests through our backend.
     This avoids CORS issues and adds server-side caching.
     Query param: coords=lon1,lat1;lon2,lat2;...
+    Optional: method=route|match
     """
     coords = request.args.get('coords', '')
+    method = (request.args.get('method') or 'route').strip().lower()
+    if method not in ('route', 'match'):
+        return jsonify({'error': 'Metodo invalido. Usa route o match'}), 400
+
     if not coords or ';' not in coords:
         return jsonify({'error': 'Se requiere parametro coords con al menos 2 puntos'}), 400
 
-    result = current_app.osrm_proxy.get_route(coords)
+    result = current_app.osrm_proxy.get_route(coords, method=method)
 
     if result:
-        # Extract just what the frontend needs
-        route = result['routes'][0]
-        return jsonify({
-            'ok': True,
-            'geometry': route['geometry'],
-            'distance': route.get('distance', 0),
-            'duration': route.get('duration', 0),
-            'cache_size': current_app.osrm_proxy.cache_size,
-        })
+        if method == 'match':
+            matchings = result.get('matchings') or []
+            lines = []
+            distance = 0.0
+            duration = 0.0
+            for matching in matchings:
+                geometry = matching.get('geometry') or {}
+                coords_line = geometry.get('coordinates') or []
+                if len(coords_line) > 1:
+                    lines.append(coords_line)
+                distance += float(matching.get('distance') or 0.0)
+                duration += float(matching.get('duration') or 0.0)
 
-    return jsonify({'ok': False, 'fallback': True})
+            merged = _merge_line_coords(lines)
+            if len(merged) > 1:
+                return jsonify({
+                    'ok': True,
+                    'geometry': {
+                        'type': 'LineString',
+                        'coordinates': merged,
+                    },
+                    'distance': distance,
+                    'duration': duration,
+                    'method': method,
+                    'cache_size': current_app.osrm_proxy.cache_size,
+                })
+        else:
+            routes = result.get('routes') or []
+            if routes:
+                route = routes[0]
+                return jsonify({
+                    'ok': True,
+                    'geometry': route.get('geometry'),
+                    'distance': route.get('distance', 0),
+                    'duration': route.get('duration', 0),
+                    'method': method,
+                    'cache_size': current_app.osrm_proxy.cache_size,
+                })
+
+    return jsonify({'ok': False, 'fallback': True, 'method': method})

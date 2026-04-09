@@ -44,6 +44,10 @@
             <span class="toolbar-note" id="rt-follow-note">Seguimiento automático activo</span>
         </div>
         <div class="toolbar-group">
+            <select id="rt-route-method" title="Método de ajuste de ruta">
+                <option value="route">Route (rápido)</option>
+                <option value="match">Match (más fiel)</option>
+            </select>
             <button class="btn btn-outline" id="btn-follow-toggle" onclick="toggleAutoFollow()">Seguimiento: ON</button>
             <button class="btn btn-outline" id="btn-recenter" onclick="recenterVehicle()" disabled>Recentrar</button>
             <button class="btn btn-outline" id="btn-toggle-rt-details" onclick="toggleRealtimeDetails()">Ocultar detalles</button>
@@ -123,17 +127,21 @@
                 <option value="1">Detalle alto (1 min)</option>
                 <option value="3" selected>Paso recomendado (3 min)</option>
                 <option value="5">Paso ligero (5 min)</option>
-                <option value="custom">Personalizado</option>
+                <option value="custom">Paso personalizado</option>
+            </select>
+            <select id="hist-route-method" title="Método de ajuste de ruta">
+                <option value="route">Route (rápido)</option>
+                <option value="match">Match (más fiel)</option>
             </select>
             <div class="sample-custom" id="sample-custom-wrap" hidden>
-                <span>Cada</span>
+                <span>Paso</span>
                 <input type="number" id="sample-custom-minutes" min="1" max="60" step="1" value="3" aria-label="Minutos por paso personalizado">
                 <span>min</span>
             </div>
 
             <button class="btn btn-outline" onclick="openModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Personalizado
+                Rango manual
             </button>
             <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
             <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>

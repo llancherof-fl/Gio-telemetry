@@ -55,6 +55,7 @@ function loadDeviceOptions() {
 
     var sampleSelect = document.getElementById('sample-select');
     var customInput = document.getElementById('sample-custom-minutes');
+    var routeMethodSelect = document.getElementById('hist-route-method');
     if (sampleSelect) {
         sampleSelect.addEventListener('change', function() {
             syncSampleCustomUi();
@@ -65,6 +66,14 @@ function loadDeviceOptions() {
         customInput.addEventListener('input', function() {
             sanitizeCustomSampleInput();
             saveHistoryFilters();
+        });
+    }
+    if (routeMethodSelect) {
+        routeMethodSelect.addEventListener('change', function() {
+            saveHistoryFilters();
+            if (currentRange.start && currentRange.end) {
+                runHistoricQuery();
+            }
         });
     }
 
@@ -85,6 +94,7 @@ function restoreHistoryFilters() {
         var sampleSelect = document.getElementById('sample-select');
         var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
+        var routeMethodSelect = document.getElementById('hist-route-method');
 
         if (sampleSelect && saved.sampleMinutes) {
             if (saved.sampleMode === 'custom') {
@@ -99,6 +109,9 @@ function restoreHistoryFilters() {
         if (customInput && saved.sampleCustomMinutes) {
             customInput.value = String(saved.sampleCustomMinutes);
         }
+        if (routeMethodSelect && saved.routeMethod) {
+            routeMethodSelect.value = saved.routeMethod === 'match' ? 'match' : 'route';
+        }
 
         syncSampleCustomUi();
     } catch (e) {
@@ -111,12 +124,14 @@ function saveHistoryFilters() {
         var sampleSelect = document.getElementById('sample-select');
         var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
+        var routeMethodSelect = document.getElementById('hist-route-method');
 
         localStorage.setItem(FILTERS_KEY, JSON.stringify({
             sampleMinutes: getSampleMinutes(),
             sampleMode: sampleSelect ? sampleSelect.value : '3',
             sampleCustomMinutes: customInput ? sanitizeCustomSampleInput() : 3,
-            device: deviceSelect ? deviceSelect.value : ''
+            device: deviceSelect ? deviceSelect.value : '',
+            routeMethod: routeMethodSelect ? getHistoricRouteMethod() : 'route'
         }));
     } catch (e) {
         // ignore storage failures
@@ -126,6 +141,12 @@ function saveHistoryFilters() {
 function getSelectedDevice() {
     var select = document.getElementById('device-select');
     return select ? (select.value || '').trim() : '';
+}
+
+function getHistoricRouteMethod() {
+    var select = document.getElementById('hist-route-method');
+    if (!select) return 'route';
+    return select.value === 'match' ? 'match' : 'route';
 }
 
 function countDistinctDevices(rows) {
@@ -171,6 +192,7 @@ function syncSampleCustomUi() {
 
     var isCustom = select.value === 'custom';
     wrap.hidden = !isCustom;
+    wrap.setAttribute('aria-hidden', String(!isCustom));
     if (isCustom) {
         sanitizeCustomSampleInput();
     }
@@ -371,10 +393,11 @@ function runHistoricQuery() {
             saveToCache(data, meta);
 
             var sampledInfo = ' · precisión ' + getSampleLabel();
+            var methodInfo = ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route');
             var cleanedInfo = meta.dropped_outliers
                 ? ' · depurados ' + meta.dropped_outliers
                 : '';
-            setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + cleanedInfo, 'var(--green)');
+            setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + methodInfo + cleanedInfo, 'var(--green)');
 
             if (meta.has_more) {
                 showToast('Se alcanzó el límite de consulta. Ajusta rango o filtro de vehículo.');
@@ -541,6 +564,7 @@ function drawHistoricRoute(data, token) {
         opacity: 0.88
     }, {
         signal: histRouteController.signal,
+        osrmMethod: getHistoricRouteMethod(),
         maxJumpKm: 28,
         maxInputPoints: 260,
         minPointDistanceMeters: 3,
@@ -737,7 +761,8 @@ function saveToCache(data, meta) {
             meta: meta || {},
             range: currentRange,
             device: getSelectedDevice(),
-            sampleMinutes: getSampleMinutes()
+            sampleMinutes: getSampleMinutes(),
+            routeMethod: getHistoricRouteMethod()
         }));
     } catch (e) {
         // ignore storage limits

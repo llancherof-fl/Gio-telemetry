@@ -109,6 +109,10 @@ function makeEndIcon() {
     });
 }
 
+function normalizeOsrmMethod(method) {
+    return method === 'match' ? 'match' : 'route';
+}
+
 /**
  * Request an OSRM route through our backend proxy.
  * Returns a promise that resolves with the route geometry or null.
@@ -119,11 +123,13 @@ function makeEndIcon() {
  */
 function fetchOSRMRoute(points, options) {
     var opts = options || {};
+    var method = normalizeOsrmMethod(opts.osrmMethod || opts.method);
     // Sample down to 25 waypoints max (OSRM limit)
     var sampled = samplePoints(points, 25);
     var coords = sampled.map(function(p) { return p[1] + ',' + p[0]; }).join(';');
+    var url = '/api/osrm-proxy?coords=' + encodeURIComponent(coords) + '&method=' + encodeURIComponent(method);
 
-    return fetch('/api/osrm-proxy?coords=' + encodeURIComponent(coords), { signal: opts.signal })
+    return fetch(url, { signal: opts.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.ok && data.geometry) {
@@ -297,6 +303,7 @@ function fetchSegmentedRoute(points, options) {
     var maxJumpKm = Math.max(20, Number(opts.maxJumpKm || 120));
     var maxInputPoints = Math.max(40, Number(opts.maxInputPoints || 220));
     var minPointDistanceMeters = Math.max(0, Number(opts.minPointDistanceMeters || 2));
+    var osrmMethod = normalizeOsrmMethod(opts.osrmMethod || opts.method);
 
     var prepared = dedupeConsecutivePoints(points, minPointDistanceMeters);
     if (prepared.length > maxInputPoints) {
@@ -327,9 +334,10 @@ function fetchSegmentedRoute(points, options) {
         }
 
         var segment = segments[segIdx++];
+        var segmentOpts = Object.assign({}, opts, { osrmMethod: osrmMethod });
         var routePromise = opts.chunked
-            ? fetchSegmentRouteChunked(segment, opts)
-            : fetchOSRMRoute(segment, opts);
+            ? fetchSegmentRouteChunked(segment, segmentOpts)
+            : fetchOSRMRoute(segment, segmentOpts);
 
         return routePromise.then(function(route) {
             if (route && route.length > 1) {
