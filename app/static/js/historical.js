@@ -11,11 +11,18 @@ var currentRange = { start: null, end: null };
 var CACHE_KEY = 'gio_hist_cache_v2';
 var CACHE_PTS = 30;
 var FILTERS_KEY = 'gio_hist_filters_v1';
+var HIST_MODE_TRIPS = 'trips';
+var HIST_MODE_POINTS = 'points';
 
 var histFetchController = null;
 var histRouteController = null;
+var histTripPointsController = null;
 var histListObserver = null;
 var histQueryToken = 0;
+var histTrips = [];
+var histTripPointsCache = {};
+var histSelectedTripId = '';
+var histSelectedTrip = null;
 
 // ══════════════════════════════════════════
 //  FILTERS
@@ -56,16 +63,27 @@ function loadDeviceOptions() {
     var sampleSelect = document.getElementById('sample-select');
     var customInput = document.getElementById('sample-custom-minutes');
     var routeMethodSelect = document.getElementById('hist-route-method');
+    var dataModeSelect = document.getElementById('hist-data-mode');
     if (sampleSelect) {
         sampleSelect.addEventListener('change', function() {
             syncSampleCustomUi();
             saveHistoryFilters();
+            if (currentRange.start && currentRange.end) {
+                runHistoricQuery();
+            }
         });
     }
     if (customInput) {
         customInput.addEventListener('input', function() {
             sanitizeCustomSampleInput();
             saveHistoryFilters();
+        });
+        customInput.addEventListener('change', function() {
+            sanitizeCustomSampleInput();
+            saveHistoryFilters();
+            if (currentRange.start && currentRange.end && getSampleMinutes() > 0) {
+                runHistoricQuery();
+            }
         });
     }
     if (routeMethodSelect) {
@@ -76,8 +94,23 @@ function loadDeviceOptions() {
             }
         });
     }
+    if (dataModeSelect) {
+        dataModeSelect.addEventListener('change', function() {
+            refreshHistoricalModeLabels();
+            saveHistoryFilters();
+            if (currentRange.start && currentRange.end) {
+                runHistoricQuery();
+            } else {
+                clearHistoricLayers();
+                document.getElementById('results-list').innerHTML =
+                    '<div class="no-data"><div class="no-data-icon">' + SVG_SEARCH + '</div>Selecciona un rango y presiona Buscar</div>';
+                document.getElementById('results-count').textContent = '—';
+            }
+        });
+    }
 
     syncSampleCustomUi();
+    refreshHistoricalModeLabels();
     updateHistoricFitButtonState(false);
 
     if (typeof updateLayoutOffsets === 'function') {
@@ -95,6 +128,7 @@ function restoreHistoryFilters() {
         var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
         var routeMethodSelect = document.getElementById('hist-route-method');
+        var dataModeSelect = document.getElementById('hist-data-mode');
 
         if (sampleSelect && saved.sampleMinutes) {
             if (saved.sampleMode === 'custom') {
@@ -112,8 +146,12 @@ function restoreHistoryFilters() {
         if (routeMethodSelect && saved.routeMethod) {
             routeMethodSelect.value = saved.routeMethod === 'match' ? 'match' : 'route';
         }
+        if (dataModeSelect && saved.dataMode) {
+            dataModeSelect.value = saved.dataMode === HIST_MODE_POINTS ? HIST_MODE_POINTS : HIST_MODE_TRIPS;
+        }
 
         syncSampleCustomUi();
+        refreshHistoricalModeLabels();
     } catch (e) {
         // ignore corrupt storage
     }
@@ -125,13 +163,15 @@ function saveHistoryFilters() {
         var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
         var routeMethodSelect = document.getElementById('hist-route-method');
+        var dataModeSelect = document.getElementById('hist-data-mode');
 
         localStorage.setItem(FILTERS_KEY, JSON.stringify({
             sampleMinutes: getSampleMinutes(),
             sampleMode: sampleSelect ? sampleSelect.value : '3',
             sampleCustomMinutes: customInput ? sanitizeCustomSampleInput() : 3,
             device: deviceSelect ? deviceSelect.value : '',
-            routeMethod: routeMethodSelect ? getHistoricRouteMethod() : 'route'
+            routeMethod: routeMethodSelect ? getHistoricRouteMethod() : 'route',
+            dataMode: dataModeSelect ? getHistoricalDataMode() : HIST_MODE_TRIPS
         }));
     } catch (e) {
         // ignore storage failures
@@ -147,6 +187,60 @@ function getHistoricRouteMethod() {
     var select = document.getElementById('hist-route-method');
     if (!select) return 'route';
     return select.value === 'match' ? 'match' : 'route';
+}
+
+function getHistoricalDataMode() {
+    var select = document.getElementById('hist-data-mode');
+    if (!select) return HIST_MODE_TRIPS;
+    return select.value === HIST_MODE_POINTS ? HIST_MODE_POINTS : HIST_MODE_TRIPS;
+}
+
+function getHistoricalPanelTitle() {
+    return getHistoricalDataMode() === HIST_MODE_TRIPS ? 'trayectos' : 'registros';
+}
+
+function refreshHistoricalModeLabels() {
+    var isTripsMode = getHistoricalDataMode() === HIST_MODE_TRIPS;
+    var resultsTitle = document.querySelector('.results-title');
+    var infoBtn = document.getElementById('hist-pane-info-btn');
+    var helpText = document.getElementById('hist-help');
+    var sampleSelect = document.getElementById('sample-select');
+    var sampleCustomWrap = document.getElementById('sample-custom-wrap');
+    var sampleCustomInput = document.getElementById('sample-custom-minutes');
+    var samplingHint = document.getElementById('hist-sample-hint');
+
+    if (resultsTitle) {
+        resultsTitle.textContent = isTripsMode ? 'Trayectos' : 'Registros';
+    }
+    if (infoBtn) {
+        infoBtn.textContent = isTripsMode ? 'Trayectos' : 'Registros';
+    }
+    if (helpText) {
+        helpText.textContent = isTripsMode
+            ? 'Selecciona rango y vehículo para listar sesiones reales (inicio/fin), aplicar paso y ver su ruta individual.'
+            : 'Usa un rango de tiempo y un nivel de detalle para consultar recorridos sin ruido visual.';
+    }
+    if (sampleSelect) {
+        sampleSelect.disabled = false;
+        sampleSelect.title = isTripsMode
+            ? 'Ajusta resolución del trayecto seleccionado'
+            : 'Reducir ruido de puntos';
+    }
+    if (sampleCustomInput) {
+        sampleCustomInput.disabled = false;
+    }
+    if (sampleCustomWrap) {
+        syncSampleCustomUi();
+    }
+    if (samplingHint) {
+        samplingHint.hidden = false;
+        samplingHint.textContent = isTripsMode
+            ? 'Paso aplicado al trayecto seleccionado (menos puntos = respuesta más rápida).'
+            : 'Paso aplicado al rango completo (menos ruido y menor carga).';
+    }
+    if (typeof updateHistoricalPanelButton === 'function') {
+        updateHistoricalPanelButton();
+    }
 }
 
 function countDistinctDevices(rows) {
@@ -328,6 +422,21 @@ function getHistoryUrl() {
     return '/api/history-range?' + params.join('&');
 }
 
+function getTripsUrl() {
+    var device = getSelectedDevice();
+    var params = [
+        'start=' + encodeURIComponent(currentRange.start),
+        'end=' + encodeURIComponent(currentRange.end),
+        'limit=400'
+    ];
+
+    if (device) {
+        params.push('device=' + encodeURIComponent(device));
+    }
+
+    return '/api/trips-range?' + params.join('&');
+}
+
 function runHistoricQuery() {
     if (!currentRange.start || !currentRange.end) {
         showToast('Selecciona un rango de tiempo primero');
@@ -336,19 +445,30 @@ function runHistoricQuery() {
 
     abortHistoricRequests();
     saveHistoryFilters();
+    refreshHistoricalModeLabels();
 
     histQueryToken += 1;
     var token = histQueryToken;
+    var mode = getHistoricalDataMode();
 
-    setHistoricStatus('Buscando registros...', 'var(--blue-strong)');
+    histTrips = [];
+    histTripPointsCache = {};
+    histSelectedTripId = '';
+    histSelectedTrip = null;
+
+    setHistoricStatus(
+        mode === HIST_MODE_TRIPS ? 'Buscando trayectos...' : 'Buscando registros...',
+        'var(--blue-strong)'
+    );
 
     document.getElementById('results-list').innerHTML =
         '<div class="no-data"><div class="skeleton" style="width:64%;height:12px;margin:8px auto"></div><div class="skeleton" style="width:42%;height:12px;margin:8px auto"></div></div>';
     document.getElementById('results-count').textContent = '...';
 
     histFetchController = new AbortController();
+    var url = mode === HIST_MODE_TRIPS ? getTripsUrl() : getHistoryUrl();
 
-    fetch(getHistoryUrl(), { signal: histFetchController.signal })
+    fetch(url, { signal: histFetchController.signal })
         .then(function(r) {
             return r.json().then(function(body) {
                 if (!r.ok) {
@@ -360,48 +480,11 @@ function runHistoricQuery() {
         })
         .then(function(response) {
             if (token !== histQueryToken) return;
-
-            var data = response.data || [];
-            var meta = response.meta || {};
-            var selectedDevice = getSelectedDevice();
-            var distinctDevices = countDistinctDevices(data);
-
-            if (meta.clamped) {
-                showToast('Fecha fin ajustada al momento actual');
-            }
-            if (meta.dropped_outliers || meta.dropped_invalid) {
-                var dropped = (meta.dropped_outliers || 0) + (meta.dropped_invalid || 0);
-                showToast('Se omitieron ' + dropped + ' puntos atípicos o inválidos');
-            }
-            if (!selectedDevice && distinctDevices > 1) {
-                showToast('Vista combinada: selecciona un vehículo para una ruta más precisa');
-            }
-
-            if (!data.length) {
-                clearHistoricLayers();
-                historicRouteBounds = null;
-                updateHistoricFitButtonState(false);
-                document.getElementById('results-list').innerHTML =
-                    '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin registros en ese período</div>';
-                document.getElementById('results-count').textContent = '0';
-                setHistoricStatus('Sin registros', 'var(--text-muted)');
+            if (mode === HIST_MODE_TRIPS) {
+                runHistoricTripsQuery(response, token);
                 return;
             }
-
-            renderHistoricResults(data);
-            drawHistoricRoute(data, token);
-            saveToCache(data, meta);
-
-            var sampledInfo = ' · precisión ' + getSampleLabel();
-            var methodInfo = ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route');
-            var cleanedInfo = meta.dropped_outliers
-                ? ' · depurados ' + meta.dropped_outliers
-                : '';
-            setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + methodInfo + cleanedInfo, 'var(--green)');
-
-            if (meta.has_more) {
-                showToast('Se alcanzó el límite de consulta. Ajusta rango o filtro de vehículo.');
-            }
+            runHistoricPointsQuery(response, token);
         })
         .catch(function(err) {
             if (err && err.name === 'AbortError') return;
@@ -416,6 +499,86 @@ function runHistoricQuery() {
         });
 }
 
+function runHistoricPointsQuery(response, token) {
+    var data = response.data || [];
+    var meta = response.meta || {};
+    var selectedDevice = getSelectedDevice();
+    var distinctDevices = countDistinctDevices(data);
+
+    if (meta.clamped) {
+        showToast('Fecha fin ajustada al momento actual');
+    }
+    if (meta.dropped_outliers || meta.dropped_invalid) {
+        var dropped = (meta.dropped_outliers || 0) + (meta.dropped_invalid || 0);
+        showToast('Se omitieron ' + dropped + ' puntos atípicos o inválidos');
+    }
+    if (!selectedDevice && distinctDevices > 1) {
+        showToast('Vista combinada: selecciona un vehículo para una ruta más precisa');
+    }
+
+    if (!data.length) {
+        clearHistoricLayers();
+        historicRouteBounds = null;
+        updateHistoricFitButtonState(false);
+        document.getElementById('results-list').innerHTML =
+            '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin registros en ese período</div>';
+        document.getElementById('results-count').textContent = '0';
+        setHistoricStatus('Sin registros', 'var(--text-muted)');
+        return;
+    }
+
+    renderHistoricResults(data);
+    drawHistoricRoute(data, token);
+    saveToCache(data, meta);
+
+    var sampledInfo = ' · precisión ' + getSampleLabel();
+    var methodInfo = ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route');
+    var cleanedInfo = meta.dropped_outliers
+        ? ' · depurados ' + meta.dropped_outliers
+        : '';
+    setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + methodInfo + cleanedInfo, 'var(--green)');
+
+    if (meta.has_more) {
+        showToast('Se alcanzó el límite de consulta. Ajusta rango o filtro de vehículo.');
+    }
+}
+
+function runHistoricTripsQuery(response, token) {
+    var trips = response.data || [];
+    var meta = response.meta || {};
+    histTrips = trips.slice();
+
+    if (!trips.length) {
+        clearHistoricLayers();
+        historicRouteBounds = null;
+        updateHistoricFitButtonState(false);
+        document.getElementById('results-list').innerHTML =
+            '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin trayectos en ese período</div>';
+        document.getElementById('results-count').textContent = '0';
+        setHistoricStatus('Sin trayectos', 'var(--text-muted)');
+        return;
+    }
+
+    renderTripResults(trips);
+    var openTrips = trips.filter(function(item) {
+        return String(item.status || '').toLowerCase() !== 'closed';
+    }).length;
+    document.getElementById('results-count').textContent = trips.length + ' tray.';
+    setHistoricStatus(
+        trips.length + ' trayectos · abiertos ' + openTrips + ' · precisión ' + getSampleLabel() + ' · selecciona uno para ver su ruta',
+        'var(--green)'
+    );
+
+    if (meta.has_more) {
+        showToast('Se alcanzó el límite de trayectos. Ajusta rango o filtro de vehículo.');
+    }
+
+    var preferred = getPreferredTrip(trips);
+    if (preferred && preferred.trip_id) {
+        selectHistoricTrip(preferred.trip_id, token, false);
+    }
+}
+
 function abortHistoricRequests() {
     if (histFetchController) {
         histFetchController.abort();
@@ -425,6 +588,211 @@ function abortHistoricRequests() {
         histRouteController.abort();
         histRouteController = null;
     }
+    if (histTripPointsController) {
+        histTripPointsController.abort();
+        histTripPointsController = null;
+    }
+}
+
+function getPreferredTrip(trips) {
+    if (!trips || !trips.length) return null;
+    for (var i = 0; i < trips.length; i++) {
+        if (String(trips[i].status || '').toLowerCase() === 'closed') {
+            return trips[i];
+        }
+    }
+    return trips[0];
+}
+
+function formatTripTimeLabel(value) {
+    if (!value) return '—';
+    var text = String(value);
+    if (text.length >= 16 && text.indexOf(':') >= 0) {
+        return text.substring(11, 16);
+    }
+    return text;
+}
+
+function isTripClosed(trip) {
+    return String((trip && trip.status) || '').toLowerCase() === 'closed';
+}
+
+function getTripById(tripId) {
+    if (!tripId || !histTrips.length) return null;
+    for (var i = 0; i < histTrips.length; i++) {
+        if (String(histTrips[i].trip_id || '') === String(tripId)) {
+            return histTrips[i];
+        }
+    }
+    return null;
+}
+
+function formatTripDuration(seconds) {
+    var sec = parseInt(seconds, 10);
+    if (!isFinite(sec) || sec <= 0) return '0m';
+    var hours = Math.floor(sec / 3600);
+    var minutes = Math.floor((sec % 3600) / 60);
+    if (hours > 0 && minutes > 0) return hours + 'h ' + minutes + 'm';
+    if (hours > 0) return hours + 'h';
+    return Math.max(1, minutes) + 'm';
+}
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderTripResults(trips) {
+    if (histListObserver) {
+        histListObserver.disconnect();
+        histListObserver = null;
+    }
+
+    var listEl = document.getElementById('results-list');
+    if (!listEl) return;
+
+    var html = trips.map(function(trip, idx) {
+        var status = isTripClosed(trip) ? 'closed' : 'open';
+        var statusLabel = status === 'closed' ? 'Finalizado' : 'Abierto';
+        var durationLabel = formatTripDuration(trip.duration_seconds);
+        var pointCount = parseInt(trip.point_count, 10);
+        if (!isFinite(pointCount)) pointCount = 0;
+        var startLabel = formatTripTimeLabel(trip.start_ts);
+        var endLabel = formatTripTimeLabel(trip.end_ts);
+        var spanLabel = status === 'closed'
+            ? ('Inicio ' + startLabel + ' · Fin ' + endLabel)
+            : ('Inicio ' + startLabel + ' · Último ' + endLabel);
+        var encodedTripId = encodeURIComponent(String(trip.trip_id || ''));
+        var safeTripId = escapeHtml(trip.trip_id || '');
+        var selectedClass = histSelectedTripId && histSelectedTripId === trip.trip_id ? ' active' : '';
+        return '<div class="result-item result-item-trip' + selectedClass + '" data-trip-id="' + encodedTripId + '">' +
+            '<div class="result-index">T' + (idx + 1) + '</div>' +
+            '<div class="result-info">' +
+                '<div class="result-coords">' + spanLabel + '</div>' +
+                '<div class="result-device">' + escapeHtml(trip.device || '—') + ' · ' + pointCount + ' pts · ' + durationLabel + '</div>' +
+                '<div class="result-subline">ID ' + safeTripId + '</div>' +
+            '</div>' +
+            '<div class="trip-status trip-status-' + status + '">' + statusLabel + '</div>' +
+        '</div>';
+    }).join('');
+
+    listEl.innerHTML = html;
+    Array.from(listEl.querySelectorAll('.result-item-trip')).forEach(function(node) {
+        node.addEventListener('click', function() {
+            var encoded = this.getAttribute('data-trip-id') || '';
+            selectHistoricTripById(encoded);
+        });
+    });
+}
+
+function refreshTripSelectionUi() {
+    var nodes = document.querySelectorAll('#results-list .result-item-trip');
+    Array.from(nodes).forEach(function(node) {
+        var encoded = node.getAttribute('data-trip-id') || '';
+        var tripId = decodeURIComponent(encoded);
+        node.classList.toggle('active', !!histSelectedTripId && tripId === histSelectedTripId);
+    });
+}
+
+function selectHistoricTripById(encodedTripId) {
+    var tripId = decodeURIComponent(String(encodedTripId || ''));
+    if (!tripId) return;
+    selectHistoricTrip(tripId, histQueryToken, true);
+}
+
+function getTripPointsCacheKey(tripId) {
+    return String(tripId || '') + '|s' + String(getSampleMinutes());
+}
+
+function selectHistoricTrip(tripId, token, fromUserClick) {
+    if (!tripId || token !== histQueryToken) return;
+
+    histSelectedTripId = tripId;
+    histSelectedTrip = getTripById(tripId);
+    refreshTripSelectionUi();
+
+    var sampleMinutes = getSampleMinutes();
+    var cacheKey = getTripPointsCacheKey(tripId);
+    var cachedPoints = histTripPointsCache[cacheKey];
+    if (cachedPoints && cachedPoints.length) {
+        drawHistoricRoute(cachedPoints, token, { trip: histSelectedTrip });
+        setHistoricStatus(
+            cachedPoints.length + ' puntos del trayecto seleccionado · precisión ' + getSampleLabel() + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'),
+            'var(--green)'
+        );
+        if (fromUserClick) {
+            showToast('Trayecto cargado desde caché local de la sesión actual');
+        }
+        return;
+    }
+
+    if (histTripPointsController) {
+        histTripPointsController.abort();
+        histTripPointsController = null;
+    }
+    histTripPointsController = new AbortController();
+
+    setHistoricStatus('Cargando trayecto seleccionado...', 'var(--blue-strong)');
+
+    fetch('/api/trip-points?trip_id=' + encodeURIComponent(tripId) + '&limit=5000&sample_minutes=' + encodeURIComponent(String(sampleMinutes)), {
+        signal: histTripPointsController.signal
+    })
+        .then(function(r) {
+            return r.json().then(function(body) {
+                if (!r.ok) {
+                    var msg = (body && body.error) ? body.error : 'No se pudo cargar el trayecto';
+                    throw new Error(msg);
+                }
+                return body;
+            });
+        })
+        .then(function(payload) {
+            if (token !== histQueryToken || tripId !== histSelectedTripId) return;
+            var points = payload.data || [];
+            var payloadMeta = payload.meta || {};
+            histTripPointsCache[cacheKey] = points;
+
+            if (!points.length) {
+                clearHistoricLayers();
+                setHistoricStatus('Trayecto sin puntos', 'var(--text-muted)');
+                return;
+            }
+
+            if (payloadMeta.dropped_outliers || payloadMeta.dropped_invalid) {
+                var dropped = (payloadMeta.dropped_outliers || 0) + (payloadMeta.dropped_invalid || 0);
+                showToast('Se depuraron ' + dropped + ' puntos atípicos en este trayecto');
+            }
+
+            drawHistoricRoute(points, token, { trip: histSelectedTrip });
+            saveToCache(points, {
+                mode: HIST_MODE_TRIPS,
+                trip_id: tripId,
+                count: points.length
+            });
+
+            var trip = histSelectedTrip || getTripById(tripId);
+            var summary = points.length + ' puntos del trayecto';
+            if (trip) {
+                summary = points.length + ' puntos · ' + formatTripDuration(trip.duration_seconds) + ' · ' + (trip.status === 'closed' ? 'finalizado' : 'abierto');
+            }
+            if (payloadMeta.dropped_outliers) {
+                summary += ' · depurados ' + payloadMeta.dropped_outliers;
+            }
+            summary += ' · precisión ' + getSampleLabel();
+            setHistoricStatus(summary + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'), 'var(--green)');
+        })
+        .catch(function(err) {
+            if (err && err.name === 'AbortError') return;
+            setHistoricStatus('Error cargando trayecto', 'var(--red)');
+            showToast(err && err.message ? err.message : 'No se pudo cargar el trayecto seleccionado');
+        })
+        .finally(function() {
+            histTripPointsController = null;
+        });
 }
 
 // ══════════════════════════════════════════
@@ -507,24 +875,28 @@ function clearHistoricLayers() {
     updateHistoricFitButtonState(false);
 }
 
-function drawHistoricRoute(data, token) {
+function drawHistoricRoute(data, token, routeContext) {
     clearHistoricLayers();
     if (!data.length) return;
 
+    var trip = routeContext && routeContext.trip ? routeContext.trip : null;
+    var closedTrip = !trip || isTripClosed(trip);
     var first = data[0];
     var last = data[data.length - 1];
 
     histMarkers.push(
         L.marker([first.lat, first.lon], { icon: makeStartIcon() })
             .addTo(mapHist)
-            .bindPopup('<b>Inicio</b><br>' + first.timestamp.substring(0, 16))
+            .bindPopup('<b>Inicio sesión</b><br>' + first.timestamp.substring(0, 16))
     );
 
     if (data.length > 1) {
+        var endLabel = closedTrip ? 'Fin sesión' : 'Último punto';
+        var endIcon = closedTrip ? makeEndIcon() : makeOpenIcon();
         histMarkers.push(
-            L.marker([last.lat, last.lon], { icon: makeEndIcon() })
+            L.marker([last.lat, last.lon], { icon: endIcon })
                 .addTo(mapHist)
-                .bindPopup('<b>Fin</b><br>' + last.timestamp.substring(0, 16))
+                .bindPopup('<b>' + endLabel + '</b><br>' + last.timestamp.substring(0, 16))
         );
     }
 
@@ -555,6 +927,7 @@ function drawHistoricRoute(data, token) {
     updateHistoricFitButtonState(true);
     fitHistoricBounds(historicRouteBounds, true);
     setHistoricStatus('Calculando ruta...', 'var(--blue-strong)');
+    var partialFitted = false;
 
     histRouteController = new AbortController();
 
@@ -571,7 +944,18 @@ function drawHistoricRoute(data, token) {
         chunked: true,
         chunkWaypoints: 25,
         chunkOverlap: 1,
-        maxChunksPerSegment: 9
+        maxChunksPerSegment: 9,
+        onPartialRoute: function(partialRoute) {
+            if (token !== histQueryToken || !routeLineHist || !partialRoute) return;
+            routeLineHist.setStyle({ color: '#5f95ff', weight: 3.5, opacity: 0.86, dashArray: null });
+            routeLineHist.setLatLngs(partialRoute);
+            historicRouteBounds = routeLineHist.getBounds();
+            updateHistoricFitButtonState(true);
+            if (!partialFitted && historicRouteBounds && historicRouteBounds.isValid()) {
+                fitHistoricBounds(historicRouteBounds, true);
+                partialFitted = true;
+            }
+        }
     }).then(function(line) {
         if (token !== histQueryToken) {
             if (line) mapHist.removeLayer(line);
@@ -599,6 +983,10 @@ function clearHistoric(silent) {
     histQueryToken += 1;
     abortHistoricRequests();
     clearHistoricLayers();
+    histTrips = [];
+    histTripPointsCache = {};
+    histSelectedTripId = '';
+    histSelectedTrip = null;
 
     if (histListObserver) {
         histListObserver.disconnect();
@@ -620,6 +1008,7 @@ function clearHistoric(silent) {
         mapHist.setView([10.9878, -74.7889], 13, { animate: true });
     }
     updateHistoricFitButtonState(false);
+    refreshHistoricalModeLabels();
 
     if (!silent) {
         showToast('Mapa histórico limpio');
@@ -762,7 +1151,8 @@ function saveToCache(data, meta) {
             range: currentRange,
             device: getSelectedDevice(),
             sampleMinutes: getSampleMinutes(),
-            routeMethod: getHistoricRouteMethod()
+            routeMethod: getHistoricRouteMethod(),
+            dataMode: getHistoricalDataMode()
         }));
     } catch (e) {
         // ignore storage limits

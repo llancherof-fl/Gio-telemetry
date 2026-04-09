@@ -26,12 +26,28 @@ def init_db():
                 lat       DOUBLE PRECISION,
                 lon       DOUBLE PRECISION,
                 device    VARCHAR(100),
-                raw_ts    BIGINT
+                raw_ts    BIGINT,
+                trip_id   VARCHAR(96),
+                event_id  VARCHAR(96),
+                event_type VARCHAR(24),
+                trip_state VARCHAR(24),
+                seq        INTEGER,
+                reason     VARCHAR(48),
+                client_ts_ms BIGINT
             )
         ''')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS trip_id VARCHAR(96)')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS event_id VARCHAR(96)')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS event_type VARCHAR(24)')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS trip_state VARCHAR(24)')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS seq INTEGER')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS reason VARCHAR(48)')
+        c.execute('ALTER TABLE coordinates ADD COLUMN IF NOT EXISTS client_ts_ms BIGINT')
         c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_ts ON coordinates(timestamp)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_device ON coordinates(device)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_device_ts ON coordinates(device, timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_trip_id_ts ON coordinates(trip_id, timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_coordinates_event_type_ts ON coordinates(event_type, timestamp)')
         conn.commit()
         print("[DB] Tabla 'coordinates' lista.")
     finally:
@@ -72,15 +88,33 @@ def _to_colombia_time(raw_ts):
 #  DATA OPERATIONS
 # ══════════════════════════════════════════
 
-def insert_data(lat, lon, device, raw_ts):
+def insert_data(
+    lat,
+    lon,
+    device,
+    raw_ts,
+    trip_id=None,
+    event_id=None,
+    event_type=None,
+    trip_state=None,
+    seq=None,
+    reason=None,
+    client_ts_ms=None,
+):
     """Insert a new GPS coordinate into the database."""
     colombia_time = _to_colombia_time(raw_ts)
     conn = get_conn()
     try:
         c = conn.cursor()
         c.execute(
-            'INSERT INTO coordinates (timestamp, lat, lon, device, raw_ts) VALUES (%s, %s, %s, %s, %s)',
-            (colombia_time, lat, lon, device, raw_ts),
+            '''INSERT INTO coordinates (
+                   timestamp, lat, lon, device, raw_ts,
+                   trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+            (
+                colombia_time, lat, lon, device, raw_ts,
+                trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms,
+            ),
         )
         conn.commit()
     finally:
@@ -93,7 +127,32 @@ def insert_data_batch(rows):
         return 0
 
     values = []
-    for lat, lon, device, raw_ts in rows:
+    for row in rows:
+        if isinstance(row, dict):
+            lat = row.get('lat')
+            lon = row.get('lon')
+            device = row.get('device')
+            raw_ts = row.get('raw_ts')
+            trip_id = row.get('trip_id')
+            event_id = row.get('event_id')
+            event_type = row.get('event_type')
+            trip_state = row.get('trip_state')
+            seq = row.get('seq')
+            reason = row.get('reason')
+            client_ts_ms = row.get('client_ts_ms')
+        else:
+            try:
+                lat, lon, device, raw_ts = row
+            except (ValueError, TypeError):
+                continue
+            trip_id = None
+            event_id = None
+            event_type = None
+            trip_state = None
+            seq = None
+            reason = None
+            client_ts_ms = None
+
         try:
             lat_f = float(lat)
             lon_f = float(lon)
@@ -105,12 +164,35 @@ def insert_data_batch(rows):
         except (ValueError, TypeError):
             raw_ts_i = 0
 
+        try:
+            seq_i = int(seq) if seq is not None else None
+        except (ValueError, TypeError):
+            seq_i = None
+
+        try:
+            client_ts_i = int(client_ts_ms) if client_ts_ms is not None else None
+        except (ValueError, TypeError):
+            client_ts_i = None
+
+        trip_id_s = (str(trip_id).strip()[:96] if trip_id else None)
+        event_id_s = (str(event_id).strip()[:96] if event_id else None)
+        event_type_s = (str(event_type).strip()[:24] if event_type else None)
+        trip_state_s = (str(trip_state).strip()[:24] if trip_state else None)
+        reason_s = (str(reason).strip()[:48] if reason else None)
+
         values.append((
             _to_colombia_time(raw_ts_i),
             lat_f,
             lon_f,
             (device or 'Desconocido')[:100],
             raw_ts_i,
+            trip_id_s,
+            event_id_s,
+            event_type_s,
+            trip_state_s,
+            seq_i,
+            reason_s,
+            client_ts_i,
         ))
 
     if not values:
@@ -121,10 +203,13 @@ def insert_data_batch(rows):
         c = conn.cursor()
         psycopg2.extras.execute_values(
             c,
-            '''INSERT INTO coordinates (timestamp, lat, lon, device, raw_ts)
+            '''INSERT INTO coordinates (
+                   timestamp, lat, lon, device, raw_ts,
+                   trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
+               )
                VALUES %s''',
             values,
-            template='(%s, %s, %s, %s, %s)',
+            template='(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
             page_size=1000,
         )
         conn.commit()
@@ -141,6 +226,7 @@ def fetch_latest(device=None):
         if device:
             c.execute(
                 '''SELECT id, timestamp, lat, lon, device
+                   , trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
                    FROM coordinates
                    WHERE device = %s
                    ORDER BY id DESC
@@ -150,6 +236,7 @@ def fetch_latest(device=None):
         else:
             c.execute(
                 '''SELECT id, timestamp, lat, lon, device
+                   , trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
                    FROM coordinates
                    ORDER BY id DESC
                    LIMIT 1'''
@@ -171,7 +258,11 @@ def fetch_history(limit=None):
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         c.execute(
-            'SELECT timestamp, lat, lon, device FROM coordinates ORDER BY id DESC LIMIT %s',
+            '''SELECT timestamp, lat, lon, device
+               , trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
+               FROM coordinates
+               ORDER BY id DESC
+               LIMIT %s''',
             (limit,),
         )
         rows = [dict(r) for r in c.fetchall()]
@@ -190,6 +281,7 @@ def fetch_history_range(start_ts, end_ts, limit=500, offset=0, device=None):
         if device:
             c.execute(
                 '''SELECT timestamp, lat, lon, device
+                   , trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
                    FROM coordinates
                    WHERE timestamp >= %s
                      AND timestamp <= %s
@@ -201,6 +293,7 @@ def fetch_history_range(start_ts, end_ts, limit=500, offset=0, device=None):
         else:
             c.execute(
                 '''SELECT timestamp, lat, lon, device
+                   , trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
                    FROM coordinates
                    WHERE timestamp >= %s
                      AND timestamp <= %s
@@ -208,6 +301,97 @@ def fetch_history_range(start_ts, end_ts, limit=500, offset=0, device=None):
                    LIMIT %s OFFSET %s''',
                 (start_ts, end_ts, limit, offset),
             )
+        rows = [dict(r) for r in c.fetchall()]
+        for r in rows:
+            r['timestamp'] = str(r['timestamp'])
+        return rows
+    finally:
+        release_conn(conn)
+
+
+def fetch_trip_summaries(start_ts, end_ts, device=None, limit=200, offset=0):
+    """
+    Fetch trip sessions grouped by trip_id for a time range.
+    A trip is considered closed when it has at least one trip_end event.
+    """
+    conn = get_conn()
+    try:
+        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if device:
+            c.execute(
+                '''SELECT
+                       trip_id,
+                       MIN(timestamp) AS start_ts,
+                       MAX(timestamp) AS end_ts,
+                       MAX(device) AS device,
+                       COUNT(*) AS point_count,
+                       SUM(CASE WHEN event_type = 'trip_start' THEN 1 ELSE 0 END) AS start_events,
+                       SUM(CASE WHEN event_type = 'trip_end' THEN 1 ELSE 0 END) AS end_events
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                     AND device = %s
+                     AND trip_id IS NOT NULL
+                     AND trip_id <> ''
+                   GROUP BY trip_id
+                   ORDER BY MAX(timestamp) DESC
+                   LIMIT %s OFFSET %s''',
+                (start_ts, end_ts, device, limit, offset),
+            )
+        else:
+            c.execute(
+                '''SELECT
+                       trip_id,
+                       MIN(timestamp) AS start_ts,
+                       MAX(timestamp) AS end_ts,
+                       MAX(device) AS device,
+                       COUNT(*) AS point_count,
+                       SUM(CASE WHEN event_type = 'trip_start' THEN 1 ELSE 0 END) AS start_events,
+                       SUM(CASE WHEN event_type = 'trip_end' THEN 1 ELSE 0 END) AS end_events
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                     AND trip_id IS NOT NULL
+                     AND trip_id <> ''
+                   GROUP BY trip_id
+                   ORDER BY MAX(timestamp) DESC
+                   LIMIT %s OFFSET %s''',
+                (start_ts, end_ts, limit, offset),
+            )
+
+        rows = [dict(r) for r in c.fetchall()]
+        for row in rows:
+            start_dt = row.get('start_ts')
+            end_dt = row.get('end_ts')
+            row['start_ts'] = str(start_dt) if start_dt else None
+            row['end_ts'] = str(end_dt) if end_dt else None
+            row['point_count'] = int(row.get('point_count') or 0)
+            row['start_events'] = int(row.get('start_events') or 0)
+            row['end_events'] = int(row.get('end_events') or 0)
+            row['status'] = 'closed' if row['end_events'] > 0 else 'open'
+            if start_dt and end_dt:
+                row['duration_seconds'] = max(0, int((end_dt - start_dt).total_seconds()))
+            else:
+                row['duration_seconds'] = 0
+        return rows
+    finally:
+        release_conn(conn)
+
+
+def fetch_trip_points(trip_id, limit=5000, offset=0):
+    """Fetch all points for a specific trip_id ordered by timestamp ASC."""
+    conn = get_conn()
+    try:
+        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        c.execute(
+            '''SELECT timestamp, lat, lon, device,
+                      trip_id, event_id, event_type, trip_state, seq, reason, client_ts_ms
+               FROM coordinates
+               WHERE trip_id = %s
+               ORDER BY timestamp ASC
+               LIMIT %s OFFSET %s''',
+            (trip_id, limit, offset),
+        )
         rows = [dict(r) for r in c.fetchall()]
         for r in rows:
             r['timestamp'] = str(r['timestamp'])

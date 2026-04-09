@@ -179,6 +179,15 @@ body {
     color: var(--text-muted);
 }
 
+.toolbar-inline-note {
+    font-size: 0.69rem;
+    color: var(--text-muted);
+    border: 1px dashed rgba(91, 185, 255, 0.28);
+    background: rgba(19, 33, 60, 0.4);
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+
 .view-help {
     margin: 4px 2px 10px;
     color: var(--text-muted);
@@ -560,6 +569,11 @@ body {
     background: rgba(27, 42, 73, 0.62);
 }
 
+.result-item.active {
+    background: rgba(35, 57, 99, 0.72);
+    border: 1px solid rgba(91, 185, 255, 0.38);
+}
+
 .result-index {
     width: 27px;
     height: 27px;
@@ -594,10 +608,48 @@ body {
     margin-top: 2px;
 }
 
+.result-subline {
+    color: rgba(174, 190, 222, 0.75);
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.62rem;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
 .result-time {
     font-family: 'Roboto Mono', monospace;
     color: var(--text-secondary);
     font-size: 0.68rem;
+}
+
+.result-item-trip {
+    align-items: flex-start;
+}
+
+.trip-status {
+    align-self: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.63rem;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.trip-status-closed {
+    color: var(--green);
+    border-color: rgba(88, 209, 127, 0.42);
+    background: rgba(88, 209, 127, 0.12);
+}
+
+.trip-status-open {
+    color: var(--orange);
+    border-color: rgba(255, 180, 87, 0.42);
+    background: rgba(255, 180, 87, 0.12);
 }
 
 .no-data {
@@ -627,6 +679,12 @@ input {
 select:focus,
 input:focus {
     border-color: var(--border-hover);
+}
+
+select:disabled,
+input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .modal-overlay {
@@ -1071,6 +1129,11 @@ input:focus {
     .sample-custom {
         width: 100%;
         justify-content: center;
+    }
+
+    .toolbar-inline-note {
+        width: 100%;
+        text-align: center;
     }
 
     .sample-custom input {

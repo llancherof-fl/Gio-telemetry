@@ -109,6 +109,19 @@ function makeEndIcon() {
     });
 }
 
+/**
+ * Create an "open trip" icon (orange).
+ */
+function makeOpenIcon() {
+    return L.divIcon({
+        html: SVG_PIN_ORANGE,
+        iconSize: [28, 36],
+        iconAnchor: [14, 36],
+        popupAnchor: [0, -36],
+        className: ''
+    });
+}
+
 function normalizeOsrmMethod(method) {
     return method === 'match' ? 'match' : 'route';
 }
@@ -288,6 +301,19 @@ function fetchSegmentRouteChunked(segment, opts) {
                     paths.push(fallbackChunk);
                 }
             }
+            if (typeof opts.onPartialChunk === 'function') {
+                var partialSegmentRoute = mergeRoutePaths(paths);
+                if (partialSegmentRoute && partialSegmentRoute.length > 1) {
+                    try {
+                        opts.onPartialChunk(partialSegmentRoute, {
+                            chunkIndex: idx,
+                            totalChunks: chunks.length
+                        });
+                    } catch (e) {
+                        // ignore callback errors
+                    }
+                }
+            }
             return processChunk();
         });
     }
@@ -334,7 +360,26 @@ function fetchSegmentedRoute(points, options) {
         }
 
         var segment = segments[segIdx++];
-        var segmentOpts = Object.assign({}, opts, { osrmMethod: osrmMethod });
+        var segmentNumber = segIdx;
+        var segmentOpts = Object.assign({}, opts, {
+            osrmMethod: osrmMethod,
+            onPartialChunk: function(partialSegmentRoute, chunkMeta) {
+                if (typeof opts.onPartialRoute !== 'function') return;
+                var aggregate = routedSegments.slice();
+                aggregate.push(partialSegmentRoute);
+                var partialGlobal = aggregate.length === 1 ? aggregate[0] : aggregate;
+                try {
+                    opts.onPartialRoute(partialGlobal, {
+                        segmentIndex: segmentNumber,
+                        totalSegments: segments.length,
+                        chunkIndex: chunkMeta ? chunkMeta.chunkIndex : null,
+                        totalChunks: chunkMeta ? chunkMeta.totalChunks : null,
+                    });
+                } catch (e) {
+                    // ignore callback errors
+                }
+            }
+        });
         var routePromise = opts.chunked
             ? fetchSegmentRouteChunked(segment, segmentOpts)
             : fetchOSRMRoute(segment, segmentOpts);
@@ -342,6 +387,19 @@ function fetchSegmentedRoute(points, options) {
         return routePromise.then(function(route) {
             if (route && route.length > 1) {
                 routedSegments.push(route);
+                if (typeof opts.onPartialRoute === 'function') {
+                    var globalRoute = routedSegments.length === 1 ? routedSegments[0] : routedSegments.slice();
+                    try {
+                        opts.onPartialRoute(globalRoute, {
+                            segmentIndex: segmentNumber,
+                            totalSegments: segments.length,
+                            chunkIndex: null,
+                            totalChunks: null,
+                        });
+                    } catch (e) {
+                        // ignore callback errors
+                    }
+                }
             }
             return processSegment();
         });
