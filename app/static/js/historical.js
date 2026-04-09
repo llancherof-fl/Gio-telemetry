@@ -1,6 +1,6 @@
 /**
  * GIO Telemetry — Historical Search Module
- * Date range search with validation, device filters, smart sampling,
+ * Date range search with validation, smart sampling,
  * request cancellation and robust map/list cleanup.
  */
 
@@ -23,42 +23,14 @@ var histTrips = [];
 var histTripPointsCache = {};
 var histSelectedTripId = '';
 var histSelectedTrip = null;
+var histPreferredTripId = '';
 
 // ══════════════════════════════════════════
 //  FILTERS
 // ══════════════════════════════════════════
 
 function loadDeviceOptions() {
-    var select = document.getElementById('device-select');
-    if (!select) return;
-
     restoreHistoryFilters();
-    var preferredDevice = select.value;
-
-    fetch('/api/devices')
-        .then(function(r) { return r.json(); })
-        .then(function(payload) {
-            var devices = (payload && payload.devices) || [];
-            var currentValue = select.value || preferredDevice;
-
-            select.innerHTML = '<option value="">Todos los vehículos</option>';
-            devices.forEach(function(device) {
-                if (!device) return;
-                var option = document.createElement('option');
-                option.value = device;
-                option.textContent = device;
-                select.appendChild(option);
-            });
-
-            if (currentValue && Array.from(select.options).some(function(o) { return o.value === currentValue; })) {
-                select.value = currentValue;
-            }
-        })
-        .catch(function() {
-            // Fallback silently to "all devices"
-        });
-
-    select.addEventListener('change', saveHistoryFilters);
 
     var sampleSelect = document.getElementById('sample-select');
     var customInput = document.getElementById('sample-custom-minutes');
@@ -98,6 +70,7 @@ function loadDeviceOptions() {
         dataModeSelect.addEventListener('change', function() {
             refreshHistoricalModeLabels();
             saveHistoryFilters();
+            showToast(getHistoricalDataMode() === HIST_MODE_TRIPS ? 'Modo trayectos activado' : 'Modo puntos crudo activado');
             if (currentRange.start && currentRange.end) {
                 runHistoricQuery();
             } else {
@@ -125,7 +98,6 @@ function restoreHistoryFilters() {
         var saved = JSON.parse(raw);
 
         var sampleSelect = document.getElementById('sample-select');
-        var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
         var routeMethodSelect = document.getElementById('hist-route-method');
         var dataModeSelect = document.getElementById('hist-data-mode');
@@ -136,9 +108,6 @@ function restoreHistoryFilters() {
             } else {
                 sampleSelect.value = String(saved.sampleMinutes);
             }
-        }
-        if (deviceSelect && saved.device) {
-            deviceSelect.value = saved.device;
         }
         if (customInput && saved.sampleCustomMinutes) {
             customInput.value = String(saved.sampleCustomMinutes);
@@ -160,7 +129,6 @@ function restoreHistoryFilters() {
 function saveHistoryFilters() {
     try {
         var sampleSelect = document.getElementById('sample-select');
-        var deviceSelect = document.getElementById('device-select');
         var customInput = document.getElementById('sample-custom-minutes');
         var routeMethodSelect = document.getElementById('hist-route-method');
         var dataModeSelect = document.getElementById('hist-data-mode');
@@ -169,18 +137,12 @@ function saveHistoryFilters() {
             sampleMinutes: getSampleMinutes(),
             sampleMode: sampleSelect ? sampleSelect.value : '3',
             sampleCustomMinutes: customInput ? sanitizeCustomSampleInput() : 3,
-            device: deviceSelect ? deviceSelect.value : '',
             routeMethod: routeMethodSelect ? getHistoricRouteMethod() : 'route',
             dataMode: dataModeSelect ? getHistoricalDataMode() : HIST_MODE_TRIPS
         }));
     } catch (e) {
         // ignore storage failures
     }
-}
-
-function getSelectedDevice() {
-    var select = document.getElementById('device-select');
-    return select ? (select.value || '').trim() : '';
 }
 
 function getHistoricRouteMethod() {
@@ -217,7 +179,7 @@ function refreshHistoricalModeLabels() {
     }
     if (helpText) {
         helpText.textContent = isTripsMode
-            ? 'Selecciona rango y vehículo para listar sesiones reales (inicio/fin), aplicar paso y ver su ruta individual.'
+            ? 'Selecciona rango para listar sesiones reales (inicio/fin), aplicar paso y ver su ruta individual.'
             : 'Usa un rango de tiempo y un nivel de detalle para consultar recorridos sin ruido visual.';
     }
     if (sampleSelect) {
@@ -241,19 +203,6 @@ function refreshHistoricalModeLabels() {
     if (typeof updateHistoricalPanelButton === 'function') {
         updateHistoricalPanelButton();
     }
-}
-
-function countDistinctDevices(rows) {
-    if (!rows || !rows.length) return 0;
-    var seen = {};
-    var count = 0;
-    for (var i = 0; i < rows.length; i++) {
-        var key = (rows[i].device || '').trim() || '__unknown__';
-        if (seen[key]) continue;
-        seen[key] = true;
-        count += 1;
-    }
-    return count;
 }
 
 function getSampleMinutes() {
@@ -407,7 +356,6 @@ function refreshHistoricLayout(skipAnimation) {
 
 function getHistoryUrl() {
     var sampleMinutes = getSampleMinutes();
-    var device = getSelectedDevice();
     var params = [
         'start=' + encodeURIComponent(currentRange.start),
         'end=' + encodeURIComponent(currentRange.end),
@@ -415,24 +363,15 @@ function getHistoryUrl() {
         'limit=2500'
     ];
 
-    if (device) {
-        params.push('device=' + encodeURIComponent(device));
-    }
-
     return '/api/history-range?' + params.join('&');
 }
 
 function getTripsUrl() {
-    var device = getSelectedDevice();
     var params = [
         'start=' + encodeURIComponent(currentRange.start),
         'end=' + encodeURIComponent(currentRange.end),
         'limit=400'
     ];
-
-    if (device) {
-        params.push('device=' + encodeURIComponent(device));
-    }
 
     return '/api/trips-range?' + params.join('&');
 }
@@ -450,11 +389,13 @@ function runHistoricQuery() {
     histQueryToken += 1;
     var token = histQueryToken;
     var mode = getHistoricalDataMode();
+    var requestedTripId = histSelectedTripId || histPreferredTripId || '';
 
     histTrips = [];
     histTripPointsCache = {};
     histSelectedTripId = '';
     histSelectedTrip = null;
+    histPreferredTripId = requestedTripId;
 
     setHistoricStatus(
         mode === HIST_MODE_TRIPS ? 'Buscando trayectos...' : 'Buscando registros...',
@@ -502,8 +443,6 @@ function runHistoricQuery() {
 function runHistoricPointsQuery(response, token) {
     var data = response.data || [];
     var meta = response.meta || {};
-    var selectedDevice = getSelectedDevice();
-    var distinctDevices = countDistinctDevices(data);
 
     if (meta.clamped) {
         showToast('Fecha fin ajustada al momento actual');
@@ -512,10 +451,6 @@ function runHistoricPointsQuery(response, token) {
         var dropped = (meta.dropped_outliers || 0) + (meta.dropped_invalid || 0);
         showToast('Se omitieron ' + dropped + ' puntos atípicos o inválidos');
     }
-    if (!selectedDevice && distinctDevices > 1) {
-        showToast('Vista combinada: selecciona un vehículo para una ruta más precisa');
-    }
-
     if (!data.length) {
         clearHistoricLayers();
         historicRouteBounds = null;
@@ -539,7 +474,7 @@ function runHistoricPointsQuery(response, token) {
     setHistoricStatus((meta.count || data.length) + ' puntos' + sampledInfo + methodInfo + cleanedInfo, 'var(--green)');
 
     if (meta.has_more) {
-        showToast('Se alcanzó el límite de consulta. Ajusta rango o filtro de vehículo.');
+        showToast('Se alcanzó el límite de consulta. Ajusta rango o sube el paso.');
     }
 }
 
@@ -570,10 +505,18 @@ function runHistoricTripsQuery(response, token) {
     );
 
     if (meta.has_more) {
-        showToast('Se alcanzó el límite de trayectos. Ajusta rango o filtro de vehículo.');
+        showToast('Se alcanzó el límite de trayectos. Ajusta rango temporal.');
     }
 
-    var preferred = getPreferredTrip(trips);
+    var preferred = null;
+    if (histPreferredTripId) {
+        preferred = trips.find(function(item) {
+            return String(item.trip_id || '') === String(histPreferredTripId);
+        }) || null;
+    }
+    if (!preferred) {
+        preferred = getPreferredTrip(trips);
+    }
     if (preferred && preferred.trip_id) {
         selectHistoricTrip(preferred.trip_id, token, false);
     }
@@ -713,6 +656,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
 
     histSelectedTripId = tripId;
     histSelectedTrip = getTripById(tripId);
+    histPreferredTripId = tripId;
     refreshTripSelectionUi();
 
     var sampleMinutes = getSampleMinutes();
@@ -1149,7 +1093,6 @@ function saveToCache(data, meta) {
             points: data.slice(-CACHE_PTS),
             meta: meta || {},
             range: currentRange,
-            device: getSelectedDevice(),
             sampleMinutes: getSampleMinutes(),
             routeMethod: getHistoricRouteMethod(),
             dataMode: getHistoricalDataMode()

@@ -107,56 +107,72 @@
 
 <div class="view" id="view-historical">
     <div class="view-toolbar historical-toolbar">
-        <div class="toolbar-group toolbar-group-wrap">
-            <select id="device-select" title="Filtrar por vehículo">
-                <option value="">Todos los vehículos</option>
-            </select>
-
-            <select id="quick-select" onchange="applyQuickRange(this.value)">
-                <option value="">Rango rápido</option>
-                <option value="30m">30 min</option>
-                <option value="1h">1 hora</option>
-                <option value="3h">3 horas</option>
-                <option value="6h">6 horas</option>
-                <option value="today">Hoy</option>
-                <option value="yesterday">Ayer</option>
-                <option value="week">Últimos 7 días</option>
-            </select>
-
-            <select id="sample-select" title="Reducir ruido de puntos">
-                <option value="1">Detalle alto (1 min)</option>
-                <option value="3" selected>Paso recomendado (3 min)</option>
-                <option value="5">Paso ligero (5 min)</option>
-                <option value="custom">Paso personalizado</option>
-            </select>
-            <select id="hist-data-mode" title="Modo de visualización histórica">
-                <option value="trips" selected>Trayectos (sesiones)</option>
-                <option value="points">Puntos (crudo)</option>
-            </select>
-            <select id="hist-route-method" title="Método de ajuste de ruta">
-                <option value="route">Route (rápido)</option>
-                <option value="match">Match (más fiel)</option>
-            </select>
-            <div class="sample-custom" id="sample-custom-wrap" hidden>
-                <span>Paso</span>
-                <input type="number" id="sample-custom-minutes" min="1" max="60" step="1" value="3" aria-label="Minutos por paso personalizado">
-                <span>min</span>
+        <div class="toolbar-group toolbar-group-wrap hist-controls-grid">
+            <div class="control-stack">
+                <span class="control-label">Rango temporal</span>
+                <div class="control-inline">
+                    <select id="quick-select" onchange="applyQuickRange(this.value)" title="Rango rápido">
+                        <option value="">Rango rápido</option>
+                        <option value="30m">30 min</option>
+                        <option value="1h">1 hora</option>
+                        <option value="3h">3 horas</option>
+                        <option value="6h">6 horas</option>
+                        <option value="today">Hoy</option>
+                        <option value="yesterday">Ayer</option>
+                        <option value="week">Últimos 7 días</option>
+                    </select>
+                    <button class="btn btn-outline" onclick="openModal()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Rango manual
+                    </button>
+                </div>
             </div>
 
-            <button class="btn btn-outline" onclick="openModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Rango manual
-            </button>
+            <div class="control-stack">
+                <span class="control-label">Detalle (paso)</span>
+                <div class="control-inline">
+                    <select id="sample-select" title="Reducir ruido de puntos">
+                        <option value="1">Detalle alto (1 min)</option>
+                        <option value="3" selected>Paso recomendado (3 min)</option>
+                        <option value="5">Paso ligero (5 min)</option>
+                        <option value="custom">Paso personalizado</option>
+                    </select>
+                    <div class="sample-custom" id="sample-custom-wrap" hidden>
+                        <span>Cada</span>
+                        <input type="number" id="sample-custom-minutes" min="1" max="60" step="1" value="3" aria-label="Minutos por paso personalizado">
+                        <span>min</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-stack control-stack-emphasis">
+                <span class="control-label">Modo de visualización</span>
+                <select id="hist-data-mode" title="Modo de visualización histórica">
+                    <option value="trips" selected>Trayectos (sesiones)</option>
+                    <option value="points">Puntos (crudo)</option>
+                </select>
+            </div>
+
+            <div class="control-stack">
+                <span class="control-label">Ruteo OSRM</span>
+                <select id="hist-route-method" title="Método de ajuste de ruta">
+                    <option value="route">Route (rápido)</option>
+                    <option value="match">Match (más fiel)</option>
+                </select>
+            </div>
+
+            <div class="control-stack control-stack-actions">
+                <span class="control-label">Acciones</span>
+                <div class="control-inline">
+                    <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
+                    <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>
+                </div>
+            </div>
+
             <span class="toolbar-inline-note" id="hist-sample-hint" hidden>Paso aplicado al rango completo (menos ruido y menor carga).</span>
-            <button class="btn btn-primary" onclick="runHistoricQuery()">Buscar</button>
-            <button class="btn btn-outline" onclick="clearHistoric()">Limpiar</button>
         </div>
 
         <div class="toolbar-group">
-            <button class="btn btn-outline" onclick="openHelpModal('steps')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M9.1 9a3 3 0 1 1 5.4 1.8c-.9 1-1.5 1.6-1.5 3"></path><circle cx="12" cy="17" r="1"></circle></svg>
-                Cómo funciona
-            </button>
             <button class="btn btn-outline" id="btn-toggle-hist-panel" onclick="toggleHistoricalPanel()">Ocultar trayectos</button>
         </div>
     </div>
@@ -166,7 +182,7 @@
         <button class="mobile-pane-btn" id="hist-pane-info-btn" onclick="switchHistoricalMobilePane('info')">Trayectos</button>
     </div>
 
-    <p class="view-help" id="hist-help">Usa un rango de tiempo y un nivel de detalle para consultar recorridos sin ruido visual.</p>
+    <p class="view-help" id="hist-help">Selecciona rango, nivel de detalle y modo de visualización para explorar recorridos sin ruido.</p>
 
     <div class="hist-layout" id="hist-layout">
         <div class="card hist-map-card">
@@ -260,7 +276,7 @@
                 <ul>
                     <li>En <b>Tiempo real</b>, valida que cambien timestamp y coordenadas.</li>
                     <li>Usa <b>Recentrar</b> si moviste el mapa manualmente.</li>
-                    <li>En <b>Histórico</b>, filtra por vehículo y rango para evitar mezclar rutas.</li>
+                    <li>En <b>Histórico</b>, ajusta modo de visualización, rango y paso según el detalle que necesites.</li>
                 </ul>
             </section>
 
