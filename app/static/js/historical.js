@@ -68,12 +68,22 @@ function loadDeviceOptions() {
         sampleSelect.addEventListener('change', function() {
             syncSampleCustomUi();
             saveHistoryFilters();
+            if (currentRange.start && currentRange.end) {
+                runHistoricQuery();
+            }
         });
     }
     if (customInput) {
         customInput.addEventListener('input', function() {
             sanitizeCustomSampleInput();
             saveHistoryFilters();
+        });
+        customInput.addEventListener('change', function() {
+            sanitizeCustomSampleInput();
+            saveHistoryFilters();
+            if (currentRange.start && currentRange.end && getSampleMinutes() > 0) {
+                runHistoricQuery();
+            }
         });
     }
     if (routeMethodSelect) {
@@ -207,28 +217,26 @@ function refreshHistoricalModeLabels() {
     }
     if (helpText) {
         helpText.textContent = isTripsMode
-            ? 'Selecciona rango y vehículo para listar sesiones reales (inicio/fin) y ver su ruta individual.'
+            ? 'Selecciona rango y vehículo para listar sesiones reales (inicio/fin), aplicar paso y ver su ruta individual.'
             : 'Usa un rango de tiempo y un nivel de detalle para consultar recorridos sin ruido visual.';
     }
     if (sampleSelect) {
-        sampleSelect.disabled = isTripsMode;
+        sampleSelect.disabled = false;
         sampleSelect.title = isTripsMode
-            ? 'En modo Trayectos el muestreo no aplica'
+            ? 'Ajusta resolución del trayecto seleccionado'
             : 'Reducir ruido de puntos';
     }
     if (sampleCustomInput) {
-        sampleCustomInput.disabled = isTripsMode;
+        sampleCustomInput.disabled = false;
     }
     if (sampleCustomWrap) {
-        if (isTripsMode) {
-            sampleCustomWrap.hidden = true;
-            sampleCustomWrap.setAttribute('aria-hidden', 'true');
-        } else {
-            syncSampleCustomUi();
-        }
+        syncSampleCustomUi();
     }
     if (samplingHint) {
-        samplingHint.hidden = !isTripsMode;
+        samplingHint.hidden = false;
+        samplingHint.textContent = isTripsMode
+            ? 'Paso aplicado al trayecto seleccionado (menos puntos = respuesta más rápida).'
+            : 'Paso aplicado al rango completo (menos ruido y menor carga).';
     }
     if (typeof updateHistoricalPanelButton === 'function') {
         updateHistoricalPanelButton();
@@ -557,7 +565,7 @@ function runHistoricTripsQuery(response, token) {
     }).length;
     document.getElementById('results-count').textContent = trips.length + ' tray.';
     setHistoricStatus(
-        trips.length + ' trayectos · abiertos ' + openTrips + ' · selecciona uno para ver su ruta',
+        trips.length + ' trayectos · abiertos ' + openTrips + ' · precisión ' + getSampleLabel() + ' · selecciona uno para ver su ruta',
         'var(--green)'
     );
 
@@ -696,6 +704,10 @@ function selectHistoricTripById(encodedTripId) {
     selectHistoricTrip(tripId, histQueryToken, true);
 }
 
+function getTripPointsCacheKey(tripId) {
+    return String(tripId || '') + '|s' + String(getSampleMinutes());
+}
+
 function selectHistoricTrip(tripId, token, fromUserClick) {
     if (!tripId || token !== histQueryToken) return;
 
@@ -703,11 +715,13 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
     histSelectedTrip = getTripById(tripId);
     refreshTripSelectionUi();
 
-    var cachedPoints = histTripPointsCache[tripId];
+    var sampleMinutes = getSampleMinutes();
+    var cacheKey = getTripPointsCacheKey(tripId);
+    var cachedPoints = histTripPointsCache[cacheKey];
     if (cachedPoints && cachedPoints.length) {
         drawHistoricRoute(cachedPoints, token, { trip: histSelectedTrip });
         setHistoricStatus(
-            cachedPoints.length + ' puntos del trayecto seleccionado · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'),
+            cachedPoints.length + ' puntos del trayecto seleccionado · precisión ' + getSampleLabel() + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'),
             'var(--green)'
         );
         if (fromUserClick) {
@@ -724,7 +738,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
 
     setHistoricStatus('Cargando trayecto seleccionado...', 'var(--blue-strong)');
 
-    fetch('/api/trip-points?trip_id=' + encodeURIComponent(tripId) + '&limit=5000', {
+    fetch('/api/trip-points?trip_id=' + encodeURIComponent(tripId) + '&limit=5000&sample_minutes=' + encodeURIComponent(String(sampleMinutes)), {
         signal: histTripPointsController.signal
     })
         .then(function(r) {
@@ -740,7 +754,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
             if (token !== histQueryToken || tripId !== histSelectedTripId) return;
             var points = payload.data || [];
             var payloadMeta = payload.meta || {};
-            histTripPointsCache[tripId] = points;
+            histTripPointsCache[cacheKey] = points;
 
             if (!points.length) {
                 clearHistoricLayers();
@@ -768,6 +782,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
             if (payloadMeta.dropped_outliers) {
                 summary += ' · depurados ' + payloadMeta.dropped_outliers;
             }
+            summary += ' · precisión ' + getSampleLabel();
             setHistoricStatus(summary + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'), 'var(--green)');
         })
         .catch(function(err) {
@@ -912,6 +927,7 @@ function drawHistoricRoute(data, token, routeContext) {
     updateHistoricFitButtonState(true);
     fitHistoricBounds(historicRouteBounds, true);
     setHistoricStatus('Calculando ruta...', 'var(--blue-strong)');
+    var partialFitted = false;
 
     histRouteController = new AbortController();
 
@@ -928,7 +944,18 @@ function drawHistoricRoute(data, token, routeContext) {
         chunked: true,
         chunkWaypoints: 25,
         chunkOverlap: 1,
-        maxChunksPerSegment: 9
+        maxChunksPerSegment: 9,
+        onPartialRoute: function(partialRoute) {
+            if (token !== histQueryToken || !routeLineHist || !partialRoute) return;
+            routeLineHist.setStyle({ color: '#5f95ff', weight: 3.5, opacity: 0.86, dashArray: null });
+            routeLineHist.setLatLngs(partialRoute);
+            historicRouteBounds = routeLineHist.getBounds();
+            updateHistoricFitButtonState(true);
+            if (!partialFitted && historicRouteBounds && historicRouteBounds.isValid()) {
+                fitHistoricBounds(historicRouteBounds, true);
+                partialFitted = true;
+            }
+        }
     }).then(function(line) {
         if (token !== histQueryToken) {
             if (line) mapHist.removeLayer(line);

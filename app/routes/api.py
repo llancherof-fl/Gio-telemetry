@@ -398,6 +398,11 @@ def api_trip_points():
     trip_id = (request.args.get('trip_id') or '').strip()
     limit = request.args.get('limit', 5000, type=int)
     offset = request.args.get('offset', 0, type=int)
+    sample_minutes = request.args.get(
+        'sample_minutes',
+        Config.HISTORY_SAMPLE_MINUTES_DEFAULT,
+        type=int,
+    )
 
     if not trip_id:
         return jsonify({'error': 'Se requiere parametro trip_id'}), 400
@@ -406,9 +411,12 @@ def api_trip_points():
         limit = 5000
     if offset is None:
         offset = 0
+    if sample_minutes is None:
+        sample_minutes = Config.HISTORY_SAMPLE_MINUTES_DEFAULT
 
     safe_limit = _clamp(limit, 1, 10000)
     safe_offset = max(0, offset)
+    safe_sample_minutes = _clamp(sample_minutes, 0, Config.HISTORY_SAMPLE_MINUTES_MAX)
 
     rows = fetch_trip_points(trip_id, limit=safe_limit, offset=safe_offset)
     raw_count = len(rows)
@@ -419,17 +427,20 @@ def api_trip_points():
         max_speed_kmh=max_speed_kmh,
         min_jump_km=min_jump_km,
     )
+    sampled_rows = _downsample_rows(cleaned_rows, safe_sample_minutes)
 
     return jsonify({
-        'data': cleaned_rows,
+        'data': sampled_rows,
         'meta': {
             'trip_id': trip_id,
-            'count': len(cleaned_rows),
+            'count': len(sampled_rows),
             'raw_count': raw_count,
             'clean_count': len(cleaned_rows),
             'limit': safe_limit,
             'offset': safe_offset,
             'has_more': raw_count == safe_limit,
+            'sample_minutes': safe_sample_minutes,
+            'sampled': safe_sample_minutes >= 2,
             'dropped_invalid': sanitize_meta['dropped_invalid'],
             'dropped_outliers': sanitize_meta['dropped_outliers'],
         },
