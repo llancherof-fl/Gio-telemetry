@@ -40,7 +40,13 @@ function updateRealtimeDetailsButton() {
 function updateHistoricalPanelButton() {
     var btn = document.getElementById('btn-toggle-hist-panel');
     if (!btn) return;
-    btn.textContent = uiPrefs.historicalPanelOpen ? 'Ocultar registros' : 'Mostrar registros';
+    var panelLabel = 'registros';
+    if (typeof getHistoricalPanelTitle === 'function') {
+        panelLabel = getHistoricalPanelTitle();
+    }
+    btn.textContent = uiPrefs.historicalPanelOpen
+        ? ('Ocultar ' + panelLabel)
+        : ('Mostrar ' + panelLabel);
 }
 
 function updateMobilePaneButtons() {

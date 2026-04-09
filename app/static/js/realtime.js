@@ -11,6 +11,15 @@ var sessionPoints = [];
 var sessionStartTime = new Date().toLocaleTimeString('es-CO');
 var lastKnownId = null;
 var latestPosition = null;
+var rtTripMeta = {
+    tripId: '',
+    state: 'legacy', // legacy | active | ended
+    lastEventType: '',
+    lastSeq: null,
+    lastEventTsMs: null,
+    startedAtLabel: '',
+    endedAtLabel: ''
+};
 
 var RT_CACHE_KEY = 'gio_rt_state_v2';
 var RT_ROUTE_METHOD_KEY = 'gio_rt_route_method_v1';
@@ -36,6 +45,9 @@ var RT_FETCH_TIMEOUT_MS = 6000;
 var RT_TELEPORT_MAX_SPEED_KMH = 260;
 var RT_TELEPORT_HARD_JUMP_KM = 120;
 var RT_TELEPORT_TOAST_COOLDOWN_MS = 15000;
+var RT_EVENT_START = 'trip_start';
+var RT_EVENT_POSITION = 'position';
+var RT_EVENT_END = 'trip_end';
 
 var autoFollow = true;
 var followUiLockUntil = 0;
@@ -282,6 +294,158 @@ function parseTelemetryTimestampMs(value) {
     return null;
 }
 
+function formatClockLabel(value) {
+    if (!value) return '';
+    var text = String(value);
+    if (text.length >= 16 && text.indexOf(':') >= 0) {
+        return text.substring(11, 16);
+    }
+    var parsed = parseTelemetryTimestampMs(value);
+    if (!parsed) return '';
+    try {
+        return new Date(parsed).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return '';
+    }
+}
+
+function normalizeTripEventType(value) {
+    var safe = String(value || '').trim().toLowerCase();
+    if (safe === RT_EVENT_START || safe === RT_EVENT_POSITION || safe === RT_EVENT_END) {
+        return safe;
+    }
+    return '';
+}
+
+function normalizeTripState(value, eventType) {
+    var safe = String(value || '').trim().toLowerCase();
+    if (safe === 'active' || safe === 'inactive') {
+        return safe;
+    }
+    if (eventType === RT_EVENT_END) return 'inactive';
+    if (eventType === RT_EVENT_START || eventType === RT_EVENT_POSITION) return 'active';
+    return '';
+}
+
+function parseTripSequence(value) {
+    var seq = parseInt(value, 10);
+    if (!isFinite(seq)) return null;
+    return seq;
+}
+
+function getRealtimeTripPayloadMeta(data) {
+    var tripId = String((data && data.trip_id) || '').trim();
+    var eventType = normalizeTripEventType(data && data.event_type);
+    var tripState = normalizeTripState(data && data.trip_state, eventType);
+    var seq = parseTripSequence(data && data.seq);
+    return {
+        tripId: tripId,
+        eventType: eventType,
+        tripState: tripState,
+        seq: seq
+    };
+}
+
+function getTripShortId(tripId) {
+    if (!tripId) return '—';
+    if (tripId.length <= 18) return tripId;
+    return tripId.slice(0, 8) + '...' + tripId.slice(-6);
+}
+
+function resetRealtimeTripMeta() {
+    rtTripMeta.tripId = '';
+    rtTripMeta.state = 'legacy';
+    rtTripMeta.lastEventType = '';
+    rtTripMeta.lastSeq = null;
+    rtTripMeta.lastEventTsMs = null;
+    rtTripMeta.startedAtLabel = '';
+    rtTripMeta.endedAtLabel = '';
+}
+
+function applyRealtimeTripLifecycle(meta, data) {
+    if (!meta || !meta.tripId) {
+        return { startedNewTrip: false, staleEvent: false, skipPointPush: false };
+    }
+
+    var eventTsMs = parseTelemetryTimestampMs(data && data.timestamp);
+    var sameTrip = rtTripMeta.tripId && (rtTripMeta.tripId === meta.tripId);
+    if (sameTrip && meta.eventType !== RT_EVENT_START) {
+        if (meta.seq !== null && rtTripMeta.lastSeq !== null && meta.seq < rtTripMeta.lastSeq) {
+            return { startedNewTrip: false, staleEvent: true, skipPointPush: true };
+        }
+        if (eventTsMs && rtTripMeta.lastEventTsMs && eventTsMs < (rtTripMeta.lastEventTsMs - 1000)) {
+            return { startedNewTrip: false, staleEvent: true, skipPointPush: true };
+        }
+    }
+
+    var shouldReset = false;
+    var startedNewTrip = false;
+    if (!sameTrip) {
+        if (!rtTripMeta.tripId) {
+            startedNewTrip = true;
+        } else if (meta.eventType === RT_EVENT_START) {
+            startedNewTrip = true;
+        } else if (rtTripMeta.state === 'ended' && (meta.eventType === RT_EVENT_POSITION || meta.tripState === 'active')) {
+            // Fallback when start packet was missed but a new active trip is already streaming.
+            startedNewTrip = true;
+        }
+        shouldReset = startedNewTrip && sessionPoints.length > 0;
+    } else if (meta.eventType === RT_EVENT_START && rtTripMeta.state === 'ended') {
+        startedNewTrip = true;
+        shouldReset = sessionPoints.length > 0;
+    }
+
+    if (shouldReset) {
+        var hadRoute = sessionPoints.length > 1;
+        resetRealtimeRouteState('Esperando puntos del nuevo trayecto...');
+        if (hadRoute) {
+            showToast('Nuevo trayecto detectado. Se inició una sesión limpia.');
+        }
+    }
+
+    rtTripMeta.tripId = meta.tripId;
+    rtTripMeta.lastEventType = meta.eventType || rtTripMeta.lastEventType || '';
+    if (meta.seq !== null) {
+        rtTripMeta.lastSeq = meta.seq;
+    }
+    if (eventTsMs) {
+        rtTripMeta.lastEventTsMs = eventTsMs;
+    }
+
+    if (meta.eventType === RT_EVENT_START && !rtTripMeta.startedAtLabel) {
+        rtTripMeta.startedAtLabel = formatClockLabel(data && data.timestamp) || new Date().toLocaleTimeString('es-CO');
+    }
+    if (!rtTripMeta.startedAtLabel && (meta.eventType === RT_EVENT_POSITION || meta.tripState === 'active')) {
+        rtTripMeta.startedAtLabel = formatClockLabel(data && data.timestamp) || new Date().toLocaleTimeString('es-CO');
+    }
+
+    var previousState = rtTripMeta.state;
+    if (meta.tripState === 'inactive' || meta.eventType === RT_EVENT_END) {
+        rtTripMeta.state = 'ended';
+        rtTripMeta.endedAtLabel = formatClockLabel(data && data.timestamp) || new Date().toLocaleTimeString('es-CO');
+    } else if (meta.tripState === 'active' || meta.eventType === RT_EVENT_START || meta.eventType === RT_EVENT_POSITION) {
+        rtTripMeta.state = 'active';
+        rtTripMeta.endedAtLabel = '';
+    } else if (!rtTripMeta.state || rtTripMeta.state === 'legacy') {
+        rtTripMeta.state = 'active';
+    }
+
+    var justEnded = previousState !== 'ended' && rtTripMeta.state === 'ended';
+    var skipPointPush = rtTripMeta.state === 'ended' && !justEnded;
+
+    return {
+        startedNewTrip: startedNewTrip,
+        staleEvent: false,
+        skipPointPush: skipPointPush
+    };
+}
+
+function getRealtimeTripStatusLabel() {
+    if (rtTripMeta.state === 'active') return 'Activo';
+    if (rtTripMeta.state === 'ended') return 'Finalizado';
+    return 'Sin sesión';
+}
+
 function isPlausibleRealtimePoint(nextPoint, nextTsMs) {
     var prevPoint = sessionPoints[sessionPoints.length - 1];
     if (!prevPoint) {
@@ -418,6 +582,7 @@ function resetRealtimeRouteState(message) {
     rtOsrmReqFail = 0;
     rtOsrmLastAttemptAt = 0;
     rtOsrmLastSuccessAt = 0;
+    resetRealtimeTripMeta();
 
     var routeInfo = document.getElementById('route-info');
     if (routeInfo) {
@@ -484,6 +649,17 @@ function fetchLatest() {
                 activeRealtimeStreamDevice = selectedDevice;
             }
 
+            var tripPayloadMeta = getRealtimeTripPayloadMeta(data);
+            var tripLifecycle = { startedNewTrip: false, staleEvent: false, skipPointPush: false };
+            if (tripPayloadMeta.tripId) {
+                tripLifecycle = applyRealtimeTripLifecycle(tripPayloadMeta, data);
+                if (tripLifecycle.staleEvent) {
+                    maybeRecoverSessionOSRM();
+                    renderRealtimePanels(data, lat, lon);
+                    return;
+                }
+            }
+
             latestPosition = { lat: lat, lon: lon };
             updateRecenterButtonsState(true);
 
@@ -520,6 +696,12 @@ function fetchLatest() {
             var shouldPush = !lastPt || jumpMeters >= RT_MIN_POINT_DISTANCE_METERS;
 
             if (shouldPush) {
+                if (tripPayloadMeta.tripId && tripLifecycle.skipPointPush) {
+                    maybeRecoverSessionOSRM();
+                    renderRealtimePanels(data, lat, lon);
+                    return;
+                }
+
                 var plausibility = isPlausibleRealtimePoint(currentPoint, currentTsMs);
                 if (!plausibility.ok) {
                     maybeShowTeleportToast();
@@ -642,6 +824,19 @@ function renderRealtimePanels(data, lat, lon) {
     var osrmStatus = getRtOsrmStatusLabel();
     var osrmCalls = rtOsrmReqTotal > 0 ? (rtOsrmReqOk + '/' + rtOsrmReqTotal) : '—';
     var methodLabel = getRealtimeRouteMethod() === 'match' ? 'Match' : 'Route';
+    var tripStatusLabel = getRealtimeTripStatusLabel();
+    var eventLabel = rtTripMeta.lastEventType || normalizeTripEventType(data && data.event_type) || 'legacy';
+    var seqLabel = rtTripMeta.lastSeq !== null ? String(rtTripMeta.lastSeq) : '—';
+    var startedLabel = rtTripMeta.startedAtLabel || sessionStartTime;
+    var endedLabel = rtTripMeta.endedAtLabel || '—';
+    var tripNote = '';
+    if (rtTripMeta.state === 'ended') {
+        tripNote = 'Trayecto finalizado. Se mantiene visible hasta detectar un nuevo trip_start.';
+    } else if (rtTripMeta.state === 'active') {
+        tripNote = 'Trayecto activo en curso.';
+    } else {
+        tripNote = 'Sin metadatos de sesión; modo compatible (legacy).';
+    }
 
     if (livePanel) {
         livePanel.innerHTML =
@@ -652,6 +847,10 @@ function renderRealtimePanels(data, lat, lon) {
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">Latitud</div><div class="val">' + lat.toFixed(6) + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Longitud</div><div class="val">' + lon.toFixed(6) + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">Trip ID</div><div class="val" style="font-size:0.75rem">' + getTripShortId(rtTripMeta.tripId) + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Estado</div><div class="val">' + tripStatusLabel + '</div></div>' +
             '</div>';
     }
 
@@ -659,7 +858,7 @@ function renderRealtimePanels(data, lat, lon) {
         routeInfo.innerHTML =
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">Puntos sesión</div><div class="val">' + sessionPoints.length + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Inicio sesión</div><div class="val" style="font-size:0.74rem">' + sessionStartTime + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Inicio sesión</div><div class="val" style="font-size:0.74rem">' + startedLabel + '</div></div>' +
             '</div>' +
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">OSRM</div><div class="val" style="font-size:0.72rem">' + osrmStatus + '</div></div>' +
@@ -667,9 +866,14 @@ function renderRealtimePanels(data, lat, lon) {
             '</div>' +
             '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">Llamadas</div><div class="val">' + osrmCalls + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Evento / Seq</div><div class="val">' + eventLabel + ' · ' + seqLabel + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">Fin sesión</div><div class="val" style="font-size:0.74rem">' + endedLabel + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Modo</div><div class="val">Tiempo real</div></div>' +
             '</div>' +
-            '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
+            '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">' + tripNote + '</p>' +
+            '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:0;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
     }
 }
 
@@ -866,6 +1070,7 @@ function saveRealtimeState() {
             lastPointTimestampMs: lastPointTimestampMs,
             latestPosition: latestPosition,
             points: snapshotPoints,
+            tripMeta: rtTripMeta,
             device: getRealtimeDeviceFilter() || activeRealtimeStreamDevice || '',
             center: center ? { lat: center.lat, lon: center.lng } : null,
             zoom: zoom
@@ -893,6 +1098,15 @@ function loadRealtimeState() {
         lastKnownId = cache.lastKnownId || lastKnownId;
         lastPointTimestampMs = cache.lastPointTimestampMs || lastPointTimestampMs;
         activeRealtimeStreamDevice = cache.device || activeRealtimeStreamDevice;
+        if (cache.tripMeta && typeof cache.tripMeta === 'object') {
+            rtTripMeta.tripId = String(cache.tripMeta.tripId || '');
+            rtTripMeta.state = String(cache.tripMeta.state || 'legacy');
+            rtTripMeta.lastEventType = normalizeTripEventType(cache.tripMeta.lastEventType);
+            rtTripMeta.lastSeq = parseTripSequence(cache.tripMeta.lastSeq);
+            rtTripMeta.lastEventTsMs = parseTelemetryTimestampMs(cache.tripMeta.lastEventTsMs);
+            rtTripMeta.startedAtLabel = String(cache.tripMeta.startedAtLabel || '');
+            rtTripMeta.endedAtLabel = String(cache.tripMeta.endedAtLabel || '');
+        }
 
         if (Array.isArray(cache.points) && cache.points.length > 1) {
             sessionPoints = cache.points.filter(function(p) {
@@ -905,7 +1119,12 @@ function loadRealtimeState() {
             drawInterimRoute();
             scheduleSessionOSRM(true);
             renderRealtimePanels(
-                { timestamp: 'Caché local', device: activeRealtimeStreamDevice || '—' },
+                {
+                    timestamp: 'Caché local',
+                    device: activeRealtimeStreamDevice || '—',
+                    trip_id: rtTripMeta.tripId || '',
+                    event_type: rtTripMeta.lastEventType || ''
+                },
                 sessionPoints[sessionPoints.length - 1][0],
                 sessionPoints[sessionPoints.length - 1][1]
             );

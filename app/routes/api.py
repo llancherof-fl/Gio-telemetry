@@ -1,6 +1,7 @@
 """
 GIO Telemetry — API Endpoints
-/api/latest, /api/history, /api/history-range, /api/devices, /api/stats, /api/osrm-proxy, /health, /test_db
+/api/latest, /api/history, /api/history-range, /api/trips-range, /api/trip-points,
+/api/devices, /api/stats, /api/osrm-proxy, /health, /test_db
 """
 import datetime
 import math
@@ -9,7 +10,14 @@ import time
 from flask import Blueprint, jsonify, request, current_app
 
 from app.config import Config
-from app.database import fetch_latest, fetch_history, fetch_history_range, fetch_devices
+from app.database import (
+    fetch_latest,
+    fetch_history,
+    fetch_history_range,
+    fetch_trip_summaries,
+    fetch_trip_points,
+    fetch_devices,
+)
 
 api_bp = Blueprint('api', __name__)
 _devices_cache = {
@@ -320,6 +328,107 @@ def api_history_range():
             'sample_minutes': safe_sample_minutes,
             'sampled': safe_sample_minutes >= 2,
             'device': device,
+            'has_more': raw_count == safe_limit,
+            'dropped_invalid': sanitize_meta['dropped_invalid'],
+            'dropped_outliers': sanitize_meta['dropped_outliers'],
+        },
+    })
+
+
+@api_bp.route('/api/trips-range')
+def api_trips_range():
+    """
+    Return trip sessions grouped by trip_id inside a time range.
+    Useful for dashboard trip list (started/ended/open).
+    """
+    start = request.args.get('start')
+    end = request.args.get('end')
+    device = (request.args.get('device') or '').strip() or None
+    limit = request.args.get('limit', 200, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    if not start or not end:
+        return jsonify({'error': 'Se requieren parametros start y end'}), 400
+
+    if limit is None:
+        limit = 200
+    if offset is None:
+        offset = 0
+
+    safe_limit = _clamp(limit, 1, 500)
+    safe_offset = max(0, offset)
+
+    try:
+        start_dt = datetime.datetime.fromisoformat(start)
+        end_dt = datetime.datetime.fromisoformat(end)
+    except ValueError:
+        return jsonify({'error': 'Formato de fecha invalido. Usa ISO 8601'}), 400
+
+    if start_dt >= end_dt:
+        return jsonify({
+            'error': 'Rango invalido: la fecha de inicio debe ser anterior a la fecha fin',
+            'code': 'INVALID_RANGE',
+        }), 400
+
+    rows = fetch_trip_summaries(
+        start_dt,
+        end_dt,
+        device=device,
+        limit=safe_limit,
+        offset=safe_offset,
+    )
+
+    return jsonify({
+        'data': rows,
+        'meta': {
+            'count': len(rows),
+            'start': start_dt.isoformat(),
+            'end': end_dt.isoformat(),
+            'limit': safe_limit,
+            'offset': safe_offset,
+            'device': device,
+            'has_more': len(rows) == safe_limit,
+        },
+    })
+
+
+@api_bp.route('/api/trip-points')
+def api_trip_points():
+    """Return ordered points for a single trip_id."""
+    trip_id = (request.args.get('trip_id') or '').strip()
+    limit = request.args.get('limit', 5000, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    if not trip_id:
+        return jsonify({'error': 'Se requiere parametro trip_id'}), 400
+
+    if limit is None:
+        limit = 5000
+    if offset is None:
+        offset = 0
+
+    safe_limit = _clamp(limit, 1, 10000)
+    safe_offset = max(0, offset)
+
+    rows = fetch_trip_points(trip_id, limit=safe_limit, offset=safe_offset)
+    raw_count = len(rows)
+    max_speed_kmh = max(30.0, float(getattr(Config, 'HISTORY_OUTLIER_MAX_SPEED_KMH', 240)))
+    min_jump_km = max(1.0, float(getattr(Config, 'HISTORY_OUTLIER_MIN_JUMP_KM', 5)))
+    cleaned_rows, sanitize_meta = _sanitize_history_rows(
+        rows,
+        max_speed_kmh=max_speed_kmh,
+        min_jump_km=min_jump_km,
+    )
+
+    return jsonify({
+        'data': cleaned_rows,
+        'meta': {
+            'trip_id': trip_id,
+            'count': len(cleaned_rows),
+            'raw_count': raw_count,
+            'clean_count': len(cleaned_rows),
+            'limit': safe_limit,
+            'offset': safe_offset,
             'has_more': raw_count == safe_limit,
             'dropped_invalid': sanitize_meta['dropped_invalid'],
             'dropped_outliers': sanitize_meta['dropped_outliers'],

@@ -109,6 +109,19 @@ function makeEndIcon() {
     });
 }
 
+/**
+ * Create an "open trip" icon (orange).
+ */
+function makeOpenIcon() {
+    return L.divIcon({
+        html: SVG_PIN_ORANGE,
+        iconSize: [28, 36],
+        iconAnchor: [14, 36],
+        popupAnchor: [0, -36],
+        className: ''
+    });
+}
+
 function normalizeOsrmMethod(method) {
     return method === 'match' ? 'match' : 'route';
 }

@@ -33,9 +33,9 @@ _ingest_stats = {
 }
 
 
-def _enqueue_packet(lat, lon, device, raw_ts):
+def _enqueue_packet(packet):
     try:
-        _ingest_queue.put_nowait((lat, lon, device, raw_ts))
+        _ingest_queue.put_nowait(packet)
         _ingest_stats['queued'] += 1
     except Full:
         _ingest_stats['dropped'] += 1
@@ -118,8 +118,21 @@ def udp_sniffer():
                     lon = payload.get('long', payload.get('lon', 0.0))
                     device = payload.get('device', 'Desconocido')
                     raw_ts = payload.get('timestamp', 0)
+                    packet = {
+                        'lat': lat,
+                        'lon': lon,
+                        'device': device,
+                        'raw_ts': raw_ts,
+                        'trip_id': payload.get('trip_id'),
+                        'event_id': payload.get('event_id'),
+                        'event_type': payload.get('event_type'),
+                        'trip_state': payload.get('trip_state'),
+                        'seq': payload.get('seq'),
+                        'reason': payload.get('reason'),
+                        'client_ts_ms': payload.get('client_ts_ms'),
+                    }
                     _ingest_stats['received'] += 1
-                    _enqueue_packet(lat, lon, device, raw_ts)
+                    _enqueue_packet(packet)
                 except json.JSONDecodeError:
                     pass
             except Exception:
