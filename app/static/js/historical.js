@@ -25,6 +25,14 @@ var histSelectedTripId = '';
 var histSelectedTrip = null;
 var histPreferredTripId = '';
 
+// ── Location Query state ──
+var locationQueryMode = false;
+var gpsDotLayer = null;
+var locationQueryMarker = null;
+var locationQuerySpinner = null;
+var locationQueryController = null;
+var locationQueryData = null;   // raw GPS points of the current route (for dot overlay)
+
 // ══════════════════════════════════════════
 //  FILTERS
 // ══════════════════════════════════════════
@@ -663,6 +671,9 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
     var cacheKey = getTripPointsCacheKey(tripId);
     var cachedPoints = histTripPointsCache[cacheKey];
     if (cachedPoints && cachedPoints.length) {
+        if (window.innerWidth <= 960 && typeof switchHistoricalMobilePane === 'function') {
+            switchHistoricalMobilePane('map');
+        }
         drawHistoricRoute(cachedPoints, token, { trip: histSelectedTrip });
         setHistoricStatus(
             cachedPoints.length + ' puntos del trayecto seleccionado · precisión ' + getSampleLabel() + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'),
@@ -815,13 +826,212 @@ function clearHistoricLayers() {
         routeLineHist = null;
     }
 
+    clearGpsDots();
+    clearLocationQueryMarker();
+    locationQueryData = null;
+
     historicRouteBounds = null;
     updateHistoricFitButtonState(false);
+    updateLocationQueryButton();
+}
+
+// ══════════════════════════════════════════
+//  LOCATION QUERY — "¿Cuándo pasó?"
+// ══════════════════════════════════════════
+
+/**
+ * Draw GPS raw-point dots on top of the OSRM route using the shared Canvas
+ * renderer. Max 200 points (sampled uniformly) to keep canvas paint cost low.
+ * Each dot is a small semi-transparent circle; no DOM node is created per dot.
+ */
+function drawGpsDots(data) {
+    clearGpsDots();
+    if (!mapHist || !histCanvasRenderer || !data || !data.length) return;
+
+    var pts = data.length > 200 ? samplePoints(data, 200) : data;
+
+    var layer = L.layerGroup();
+    for (var i = 0; i < pts.length; i++) {
+        var p = pts[i];
+        var lat = parseFloat(p.lat);
+        var lon = parseFloat(p.lon);
+        if (!isFinite(lat) || !isFinite(lon)) continue;
+
+        L.circleMarker([lat, lon], {
+            renderer: histCanvasRenderer,
+            radius: 3.5,
+            color: '#ffa94d',
+            fillColor: '#ffa94d',
+            fillOpacity: 0.7,
+            weight: 1,
+            interactive: false   // dots are decorative — clicks fall through to map
+        }).addTo(layer);
+    }
+    layer.addTo(mapHist);
+    gpsDotLayer = layer;
+}
+
+function clearGpsDots() {
+    if (gpsDotLayer && mapHist) {
+        mapHist.removeLayer(gpsDotLayer);
+        gpsDotLayer = null;
+    }
+}
+
+function clearLocationQueryMarker() {
+    if (locationQuerySpinner && mapHist) {
+        mapHist.removeLayer(locationQuerySpinner);
+        locationQuerySpinner = null;
+    }
+    if (locationQueryMarker && mapHist) {
+        mapHist.removeLayer(locationQueryMarker);
+        locationQueryMarker = null;
+    }
+    if (locationQueryController) {
+        locationQueryController.abort();
+        locationQueryController = null;
+    }
+}
+
+/**
+ * Update the "¿Cuándo pasó?" button appearance to reflect current mode state.
+ */
+function updateLocationQueryButton() {
+    var btn = document.getElementById('btn-query-location');
+    if (!btn) return;
+    var hasRoute = !!locationQueryData && locationQueryData.length > 0;
+    btn.disabled = !hasRoute;
+    btn.classList.toggle('btn-active-query', locationQueryMode && hasRoute);
+}
+
+/**
+ * Toggle location query mode on/off.
+ * When ON: map cursor becomes crosshair, GPS dots appear, click handler active.
+ * When OFF: everything reverts, pending markers are cleared.
+ */
+function toggleLocationQueryMode() {
+    if (!locationQueryData || !locationQueryData.length) return;
+
+    locationQueryMode = !locationQueryMode;
+    updateLocationQueryButton();
+
+    var mapEl = document.getElementById('map-hist');
+    var banner = document.getElementById('location-query-banner');
+
+    if (locationQueryMode) {
+        if (mapEl) mapEl.classList.add('query-mode');
+        if (banner) banner.hidden = false;
+        drawGpsDots(locationQueryData);
+        mapHist.on('click', onHistMapClick);
+    } else {
+        if (mapEl) mapEl.classList.remove('query-mode');
+        if (banner) banner.hidden = true;
+        clearGpsDots();
+        clearLocationQueryMarker();
+        mapHist.off('click', onHistMapClick);
+    }
+}
+
+/**
+ * Handle map click in location query mode.
+ * Shows a spinner dot, calls /api/nearest-point, then displays a popup with
+ * the exact timestamp of the closest GPS record to the clicked coordinates.
+ */
+function onHistMapClick(e) {
+    if (!locationQueryMode || !currentRange.start || !currentRange.end) return;
+
+    clearLocationQueryMarker();
+
+    var lat = e.latlng.lat;
+    var lon = e.latlng.lng;
+
+    // Immediate visual feedback at click location
+    locationQuerySpinner = L.circleMarker([lat, lon], {
+        renderer: histCanvasRenderer,
+        radius: 9,
+        color: '#ffa94d',
+        fillColor: '#ffa94d',
+        fillOpacity: 0.35,
+        weight: 2,
+        interactive: false
+    }).addTo(mapHist);
+
+    var device = '';
+    var deviceSelect = document.getElementById('device-select');
+    if (deviceSelect) device = (deviceSelect.value || '').trim();
+
+    var url = '/api/nearest-point'
+        + '?lat='    + encodeURIComponent(lat)
+        + '&lon='    + encodeURIComponent(lon)
+        + '&start='  + encodeURIComponent(currentRange.start)
+        + '&end='    + encodeURIComponent(currentRange.end)
+        + '&radius_km=0.4';
+    if (device) url += '&device=' + encodeURIComponent(device);
+
+    locationQueryController = new AbortController();
+    fetch(url, { signal: locationQueryController.signal })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (locationQuerySpinner && mapHist) {
+                mapHist.removeLayer(locationQuerySpinner);
+                locationQuerySpinner = null;
+            }
+            if (!data.found) {
+                showToast('Sin registro GPS cerca de ese punto');
+                return;
+            }
+
+            var ts   = String(data.timestamp || '');
+            var time = ts.length >= 16 ? ts.substring(11, 16) : ts;
+            var date = ts.length >= 10 ? ts.substring(0, 10) : '';
+            var dist = data.distance_m < 1000
+                ? Math.round(data.distance_m) + ' m del clic'
+                : (data.distance_m / 1000).toFixed(2) + ' km del clic';
+
+            locationQueryMarker = L.circleMarker([data.lat, data.lon], {
+                renderer: histCanvasRenderer,
+                radius: 8,
+                color: '#ffa94d',
+                fillColor: '#ffa94d',
+                fillOpacity: 0.9,
+                weight: 2
+            })
+            .bindPopup(
+                '<div class="lq-popup">'
+                + '<div class="lq-popup-time">' + time + '</div>'
+                + '<div class="lq-popup-date">' + date + '</div>'
+                + '<div class="lq-popup-dist">' + dist + '</div>'
+                + '</div>',
+                { maxWidth: 180, className: 'lq-popup-wrap' }
+            )
+            .addTo(mapHist)
+            .openPopup();
+        })
+        .catch(function(err) {
+            if (locationQuerySpinner && mapHist) {
+                mapHist.removeLayer(locationQuerySpinner);
+                locationQuerySpinner = null;
+            }
+            if (err && err.name === 'AbortError') return;
+            showToast('No se pudo consultar la posición');
+        })
+        .finally(function() {
+            locationQueryController = null;
+        });
 }
 
 function drawHistoricRoute(data, token, routeContext) {
     clearHistoricLayers();
     if (!data.length) return;
+
+    // Store reference so GPS dot overlay and query mode can use it
+    locationQueryData = data;
+    updateLocationQueryButton();
+
+    // On mobile, always surface the map pane when a route is about to draw
+    if (window.innerWidth <= 960 && typeof switchHistoricalMobilePane === 'function') {
+        switchHistoricalMobilePane('map');
+    }
 
     var trip = routeContext && routeContext.trip ? routeContext.trip : null;
     var closedTrip = !trip || isTripClosed(trip);

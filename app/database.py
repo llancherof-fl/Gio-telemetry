@@ -400,6 +400,57 @@ def fetch_trip_points(trip_id, limit=5000, offset=0):
         release_conn(conn)
 
 
+def fetch_nearest_point(lat, lon, start_ts, end_ts, delta_deg, device=None):
+    """
+    Return up to 300 rows inside a bounding box around (lat, lon) for a time range.
+    The caller selects the exact nearest point via Haversine to avoid a full-table
+    scan. Uses the existing (device, timestamp) or timestamp B-tree index as a
+    range prefilter — no spatial index required.
+    """
+    conn = get_conn()
+    try:
+        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        lat_min = lat - delta_deg
+        lat_max = lat + delta_deg
+        lon_min = lon - delta_deg
+        lon_max = lon + delta_deg
+
+        if device:
+            c.execute(
+                '''SELECT timestamp, lat, lon, device, trip_id, seq
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                     AND device = %s
+                     AND lat  BETWEEN %s AND %s
+                     AND lon  BETWEEN %s AND %s
+                   ORDER BY timestamp ASC
+                   LIMIT 300''',
+                (start_ts, end_ts, device,
+                 lat_min, lat_max, lon_min, lon_max),
+            )
+        else:
+            c.execute(
+                '''SELECT timestamp, lat, lon, device, trip_id, seq
+                   FROM coordinates
+                   WHERE timestamp >= %s
+                     AND timestamp <= %s
+                     AND lat  BETWEEN %s AND %s
+                     AND lon  BETWEEN %s AND %s
+                   ORDER BY timestamp ASC
+                   LIMIT 300''',
+                (start_ts, end_ts,
+                 lat_min, lat_max, lon_min, lon_max),
+            )
+
+        rows = [dict(r) for r in c.fetchall()]
+        for r in rows:
+            r['timestamp'] = str(r['timestamp'])
+        return rows
+    finally:
+        release_conn(conn)
+
+
 def fetch_devices(limit=200):
     """Fetch distinct device names for UI filters."""
     conn = get_conn()

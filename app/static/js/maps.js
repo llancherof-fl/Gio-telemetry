@@ -6,6 +6,11 @@
 var mapRT = null;
 var mapHist = null;
 
+// Shared Canvas renderer for all GPS dot overlays in the historical map.
+// A single <canvas> node handles all circle markers — O(1) DOM cost regardless
+// of point count, much faster than the default SVG renderer.
+var histCanvasRenderer = null;
+
 function distanceKm(a, b) {
     var toRad = Math.PI / 180;
     var dLat = (b[0] - a[0]) * toRad;
@@ -61,6 +66,10 @@ function initMaps() {
 
     mapHist = L.map('map-hist', mapOpts).setView([10.9878, -74.7889], 13);
     L.tileLayer(tileUrl, tileOpts).addTo(mapHist);
+
+    // Canvas renderer for GPS dot overlay — shared across all circle markers
+    // so only one <canvas> element is created in the DOM.
+    histCanvasRenderer = L.canvas({ padding: 0.5 });
 }
 
 /**

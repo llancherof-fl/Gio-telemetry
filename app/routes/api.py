@@ -16,6 +16,7 @@ from app.database import (
     fetch_history_range,
     fetch_trip_summaries,
     fetch_trip_points,
+    fetch_nearest_point,
     fetch_devices,
 )
 
@@ -444,6 +445,76 @@ def api_trip_points():
             'dropped_invalid': sanitize_meta['dropped_invalid'],
             'dropped_outliers': sanitize_meta['dropped_outliers'],
         },
+    })
+
+
+# ══════════════════════════════════════════
+#  NEAREST POINT QUERY
+# ══════════════════════════════════════════
+
+@api_bp.route('/api/nearest-point')
+def api_nearest_point():
+    """
+    Return the GPS record closest to a clicked (lat, lon) within a time range.
+    Answers the question: "When did the vehicle pass through this location?"
+
+    Query params:
+      lat, lon      — clicked coordinates (required)
+      start, end    — ISO 8601 time range (required)
+      device        — optional device filter
+      radius_km     — search radius in km, default 0.5, max 5
+    """
+    try:
+        lat = float(request.args.get('lat', ''))
+        lon = float(request.args.get('lon', ''))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Se requieren lat y lon numericos'}), 400
+
+    start = request.args.get('start')
+    end = request.args.get('end')
+    if not start or not end:
+        return jsonify({'error': 'Se requieren parametros start y end'}), 400
+
+    try:
+        start_dt = datetime.datetime.fromisoformat(start)
+        end_dt = datetime.datetime.fromisoformat(end)
+    except ValueError:
+        return jsonify({'error': 'Formato de fecha invalido. Usa ISO 8601'}), 400
+
+    if not _is_valid_latlon(lat, lon):
+        return jsonify({'error': 'Coordenadas fuera de rango'}), 400
+
+    device = (request.args.get('device') or '').strip() or None
+
+    try:
+        radius_km = _clamp(float(request.args.get('radius_km', 0.5) or 0.5), 0.05, 5.0)
+    except (ValueError, TypeError):
+        radius_km = 0.5
+
+    # 1 degree ≈ 111 km — conservative bounding box, exact distance done in Python
+    delta_deg = radius_km / 111.0
+
+    rows = fetch_nearest_point(lat, lon, start_dt, end_dt, delta_deg, device=device)
+
+    if not rows:
+        return jsonify({'found': False, 'message': 'Sin registros en ese radio'})
+
+    # Pick the single nearest row using exact Haversine
+    best = min(
+        rows,
+        key=lambda r: _haversine_km(lat, lon, float(r['lat']), float(r['lon'])),
+    )
+    dist_m = _haversine_km(lat, lon, float(best['lat']), float(best['lon'])) * 1000.0
+
+    return jsonify({
+        'found': True,
+        'timestamp': best['timestamp'],
+        'lat': float(best['lat']),
+        'lon': float(best['lon']),
+        'distance_m': round(dist_m, 1),
+        'device': best.get('device'),
+        'trip_id': best.get('trip_id'),
+        'seq': best.get('seq'),
     })
 
 
