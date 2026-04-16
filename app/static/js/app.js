@@ -183,6 +183,18 @@ function toggleRealtimeDetails() {
     }
 }
 
+function toggleMobileFilters() {
+    var histView = document.getElementById('view-historical');
+    if (!histView) return;
+    var isOpen = histView.classList.toggle('filters-open');
+    var btn = document.getElementById('btn-toggle-mobile-filters');
+    if (btn) btn.classList.toggle('btn-active-query', isOpen);
+    updateLayoutOffsets();
+    if (!isOpen && mapHist) {
+        setTimeout(function() { mapHist.invalidateSize(); }, 120);
+    }
+}
+
 function toggleHistoricalPanel() {
     uiPrefs.historicalPanelOpen = !uiPrefs.historicalPanelOpen;
     applyUIPreferences();

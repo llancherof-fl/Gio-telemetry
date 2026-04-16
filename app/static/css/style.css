@@ -1381,3 +1381,65 @@ input:disabled {
     border-top: 1px solid var(--border);
     padding-top: 5px;
 }
+
+/* ══════════════════════════════════════════
+   LOCATION QUERY — RESULT MARKER (divIcon)
+   ══════════════════════════════════════════ */
+
+.lq-result-icon {
+    background: transparent;
+    border: none;
+}
+
+/* ══════════════════════════════════════════
+   MOBILE FILTER BAR — compact always-visible strip
+   ══════════════════════════════════════════ */
+
+/* Hidden on desktop — shown only on mobile via media query below */
+.mobile-filter-bar {
+    display: none;
+}
+
+/* Full controls always visible on desktop */
+.hist-controls-collapse {
+    display: contents;
+}
+
+@media (max-width: 960px) {
+    /* Show compact strip on mobile */
+    .mobile-filter-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        padding: 2px 0;
+    }
+
+    .mobile-filter-summary {
+        flex: 1;
+        font-size: 0.74rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    .mobile-filter-bar-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    /* Full controls collapsed by default on mobile */
+    .hist-controls-collapse {
+        display: none;
+        width: 100%;
+    }
+
+    /* Expand when view has .filters-open */
+    #view-historical.filters-open .hist-controls-collapse {
+        display: block;
+    }
+}

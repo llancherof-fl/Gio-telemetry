@@ -393,6 +393,7 @@ function runHistoricQuery() {
     abortHistoricRequests();
     saveHistoryFilters();
     refreshHistoricalModeLabels();
+    updateMobileFilterSummary();
 
     histQueryToken += 1;
     var token = histQueryToken;
@@ -474,6 +475,14 @@ function runHistoricPointsQuery(response, token) {
     drawHistoricRoute(data, token);
     saveToCache(data, meta);
 
+    // Auto-collapse filter panel on mobile after successful search
+    if (window.innerWidth <= 960 && typeof toggleMobileFilters === 'function') {
+        var histView = document.getElementById('view-historical');
+        if (histView && histView.classList.contains('filters-open')) {
+            toggleMobileFilters();
+        }
+    }
+
     var sampledInfo = ' · precisión ' + getSampleLabel();
     var methodInfo = ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route');
     var cleanedInfo = meta.dropped_outliers
@@ -503,6 +512,15 @@ function runHistoricTripsQuery(response, token) {
     }
 
     renderTripResults(trips);
+
+    // Auto-collapse filter panel on mobile after successful search
+    if (window.innerWidth <= 960 && typeof toggleMobileFilters === 'function') {
+        var histView = document.getElementById('view-historical');
+        if (histView && histView.classList.contains('filters-open')) {
+            toggleMobileFilters();
+        }
+    }
+
     var openTrips = trips.filter(function(item) {
         return String(item.status || '').toLowerCase() !== 'closed';
     }).length;
@@ -859,11 +877,11 @@ function drawGpsDots(data) {
 
         L.circleMarker([lat, lon], {
             renderer: histCanvasRenderer,
-            radius: 3.5,
+            radius: 6,
             color: '#ffa94d',
             fillColor: '#ffa94d',
-            fillOpacity: 0.7,
-            weight: 1,
+            fillOpacity: 0.9,
+            weight: 1.5,
             interactive: false   // dots are decorative — clicks fall through to map
         }).addTo(layer);
     }
@@ -902,6 +920,34 @@ function updateLocationQueryButton() {
     var hasRoute = !!locationQueryData && locationQueryData.length > 0;
     btn.disabled = !hasRoute;
     btn.classList.toggle('btn-active-query', locationQueryMode && hasRoute);
+}
+
+/**
+ * Update the compact mobile filter summary strip with the active range + step.
+ * Called whenever filters change so the summary stays current without expanding.
+ */
+function updateMobileFilterSummary() {
+    var el = document.getElementById('mobile-filter-summary');
+    if (!el) return;
+
+    if (!currentRange.start || !currentRange.end) {
+        el.textContent = 'Configura un rango temporal';
+        return;
+    }
+
+    var startDate = currentRange.start.substring(0, 10);
+    var endDate   = currentRange.end.substring(0, 10);
+    var startTime = currentRange.start.substring(11, 16);
+    var endTime   = currentRange.end.substring(11, 16);
+
+    var rangeLabel;
+    if (startDate === endDate) {
+        rangeLabel = startDate + ' ' + startTime + '–' + endTime;
+    } else {
+        rangeLabel = startDate.substring(5) + ' – ' + endDate.substring(5);
+    }
+
+    el.textContent = rangeLabel + ' · ' + getSampleLabel();
 }
 
 /**
@@ -988,14 +1034,17 @@ function onHistMapClick(e) {
                 ? Math.round(data.distance_m) + ' m del clic'
                 : (data.distance_m / 1000).toFixed(2) + ' km del clic';
 
-            locationQueryMarker = L.circleMarker([data.lat, data.lon], {
-                renderer: histCanvasRenderer,
-                radius: 8,
-                color: '#ffa94d',
-                fillColor: '#ffa94d',
-                fillOpacity: 0.9,
-                weight: 2
-            })
+            var lqIcon = L.divIcon({
+                className: 'lq-result-icon',
+                html: '<svg width="24" height="24" viewBox="0 0 24 24">'
+                    + '<circle cx="12" cy="12" r="8" fill="#ffa94d" stroke="#fff" stroke-width="2.5"/>'
+                    + '<circle cx="12" cy="12" r="3" fill="#fff"/>'
+                    + '</svg>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                popupAnchor: [0, -14]
+            });
+            locationQueryMarker = L.marker([data.lat, data.lon], { icon: lqIcon })
             .bindPopup(
                 '<div class="lq-popup">'
                 + '<div class="lq-popup-time">' + time + '</div>'
