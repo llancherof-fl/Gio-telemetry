@@ -191,9 +191,22 @@
                     <span class="badge badge-blue">HIST</span>
                     Ruta en la ventana seleccionada
                 </div>
-                <span id="hist-status" class="inline-status"></span>
+                <div class="card-header-actions">
+                    <button class="btn btn-outline btn-sm" id="btn-query-location" onclick="toggleLocationQueryMode()" disabled title="Toca el mapa para saber cuándo pasó el vehículo por ese punto">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="22"/><line x1="2" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="22" y2="12"/></svg>
+                        ¿Cuándo pasó?
+                    </button>
+                    <span id="hist-status" class="inline-status"></span>
+                </div>
             </div>
             <div class="map-wrap hist-map-wrap" id="map-hist-wrap">
+                <div id="location-query-banner" class="location-query-banner" hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="22"/><line x1="2" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="22" y2="12"/></svg>
+                    Toca el mapa para saber cuándo pasó el vehículo
+                    <button class="lq-banner-close" onclick="toggleLocationQueryMode()" aria-label="Cerrar modo consulta">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
                 <div id="map-hist"></div>
                 <button class="map-fab" id="btn-hist-fit" onclick="fitHistoricRoute()" disabled>Reencuadrar ruta</button>
             </div>

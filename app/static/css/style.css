@@ -1230,4 +1230,154 @@ input:disabled {
         left: 10px;
         bottom: 10px;
     }
+
+    /* ── Toolbar 2-column layout on mobile to reduce vertical height ── */
+    .hist-controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .hist-controls-grid .control-stack {
+        width: auto;
+    }
+
+    /* Rango temporal spans full width (has two controls inside) */
+    .hist-controls-grid .control-stack:first-child {
+        grid-column: 1 / -1;
+    }
+
+    /* Acciones (Buscar / Limpiar) spans full width */
+    .hist-controls-grid .control-stack-actions {
+        grid-column: 1 / -1;
+    }
+
+    /* Hint note spans full width */
+    .hist-controls-grid .toolbar-inline-note {
+        grid-column: 1 / -1;
+    }
+}
+
+/* ══════════════════════════════════════════
+   CARD HEADER ACTIONS (query button + status)
+   ══════════════════════════════════════════ */
+
+.card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    gap: 5px;
+}
+
+/* Active state when query mode is ON */
+.btn-active-query {
+    background: rgba(255, 169, 77, 0.15);
+    border-color: #ffa94d;
+    color: #ffa94d;
+}
+
+.btn-active-query:hover {
+    background: rgba(255, 169, 77, 0.25);
+}
+
+/* ══════════════════════════════════════════
+   LOCATION QUERY — CROSSHAIR + BANNER + POPUP
+   ══════════════════════════════════════════ */
+
+/* Crosshair cursor when query mode is active */
+#map-hist.query-mode,
+#map-hist.query-mode .leaflet-container {
+    cursor: crosshair !important;
+}
+
+/* Banner shown on top of the map on mobile (and desktop when mode is on) */
+.location-query-banner {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(10, 14, 26, 0.88);
+    border: 1px solid rgba(255, 169, 77, 0.45);
+    color: #ffa94d;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 6px 10px 6px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.lq-banner-close {
+    background: transparent;
+    border: none;
+    color: #ffa94d;
+    cursor: pointer;
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+    opacity: 0.8;
+    flex-shrink: 0;
+}
+
+.lq-banner-close:hover {
+    opacity: 1;
+}
+
+/* Leaflet popup for query result */
+.lq-popup-wrap .leaflet-popup-content-wrapper {
+    background: rgba(10, 14, 26, 0.95);
+    border: 1px solid rgba(255, 169, 77, 0.4);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    padding: 0;
+}
+
+.lq-popup-wrap .leaflet-popup-tip {
+    background: rgba(10, 14, 26, 0.95);
+}
+
+.lq-popup-wrap .leaflet-popup-content {
+    margin: 0;
+}
+
+.lq-popup {
+    padding: 10px 14px;
+    text-align: center;
+    min-width: 110px;
+}
+
+.lq-popup-time {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #ffa94d;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+}
+
+.lq-popup-date {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.lq-popup-dist {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    padding-top: 5px;
 }
