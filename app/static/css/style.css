@@ -28,13 +28,16 @@
     --layout-offset-mobile: 276px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     height: 100%;
 }
 
@@ -146,6 +149,7 @@ body {
         opacity: 0;
         transform: translateY(4px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -767,6 +771,7 @@ input:disabled {
         opacity: 0;
         transform: translateY(8px) scale(0.98);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -953,6 +958,7 @@ input:disabled {
     0% {
         background-position: 200% 0;
     }
+
     100% {
         background-position: -200% 0;
     }
@@ -1406,6 +1412,7 @@ input:disabled {
 }
 
 @media (max-width: 960px) {
+
     /* Show compact strip on mobile */
     .mobile-filter-bar {
         display: flex;

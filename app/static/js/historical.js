@@ -45,7 +45,7 @@ function loadDeviceOptions() {
     var routeMethodSelect = document.getElementById('hist-route-method');
     var dataModeSelect = document.getElementById('hist-data-mode');
     if (sampleSelect) {
-        sampleSelect.addEventListener('change', function() {
+        sampleSelect.addEventListener('change', function () {
             syncSampleCustomUi();
             saveHistoryFilters();
             if (currentRange.start && currentRange.end) {
@@ -54,11 +54,11 @@ function loadDeviceOptions() {
         });
     }
     if (customInput) {
-        customInput.addEventListener('input', function() {
+        customInput.addEventListener('input', function () {
             sanitizeCustomSampleInput();
             saveHistoryFilters();
         });
-        customInput.addEventListener('change', function() {
+        customInput.addEventListener('change', function () {
             sanitizeCustomSampleInput();
             saveHistoryFilters();
             if (currentRange.start && currentRange.end && getSampleMinutes() > 0) {
@@ -67,7 +67,7 @@ function loadDeviceOptions() {
         });
     }
     if (routeMethodSelect) {
-        routeMethodSelect.addEventListener('change', function() {
+        routeMethodSelect.addEventListener('change', function () {
             saveHistoryFilters();
             if (currentRange.start && currentRange.end) {
                 runHistoricQuery();
@@ -75,7 +75,7 @@ function loadDeviceOptions() {
         });
     }
     if (dataModeSelect) {
-        dataModeSelect.addEventListener('change', function() {
+        dataModeSelect.addEventListener('change', function () {
             refreshHistoricalModeLabels();
             saveHistoryFilters();
             showToast(getHistoricalDataMode() === HIST_MODE_TRIPS ? 'Modo trayectos activado' : 'Modo puntos crudo activado');
@@ -357,7 +357,7 @@ function refreshHistoricLayout(skipAnimation) {
     if (!mapHist) return;
     mapHist.invalidateSize();
     if (!historicRouteBounds) return;
-    setTimeout(function() {
+    setTimeout(function () {
         fitHistoricBounds(historicRouteBounds, !skipAnimation);
     }, 40);
 }
@@ -419,8 +419,8 @@ function runHistoricQuery() {
     var url = mode === HIST_MODE_TRIPS ? getTripsUrl() : getHistoryUrl();
 
     fetch(url, { signal: histFetchController.signal })
-        .then(function(r) {
-            return r.json().then(function(body) {
+        .then(function (r) {
+            return r.json().then(function (body) {
                 if (!r.ok) {
                     var msg = (body && body.error) ? body.error : 'Error al consultar histórico';
                     throw new Error(msg);
@@ -428,7 +428,7 @@ function runHistoricQuery() {
                 return body;
             });
         })
-        .then(function(response) {
+        .then(function (response) {
             if (token !== histQueryToken) return;
             if (mode === HIST_MODE_TRIPS) {
                 runHistoricTripsQuery(response, token);
@@ -436,7 +436,7 @@ function runHistoricQuery() {
             }
             runHistoricPointsQuery(response, token);
         })
-        .catch(function(err) {
+        .catch(function (err) {
             if (err && err.name === 'AbortError') return;
 
             clearHistoricLayers();
@@ -521,7 +521,7 @@ function runHistoricTripsQuery(response, token) {
         }
     }
 
-    var openTrips = trips.filter(function(item) {
+    var openTrips = trips.filter(function (item) {
         return String(item.status || '').toLowerCase() !== 'closed';
     }).length;
     document.getElementById('results-count').textContent = trips.length + ' tray.';
@@ -536,7 +536,7 @@ function runHistoricTripsQuery(response, token) {
 
     var preferred = null;
     if (histPreferredTripId) {
-        preferred = trips.find(function(item) {
+        preferred = trips.find(function (item) {
             return String(item.trip_id || '') === String(histPreferredTripId);
         }) || null;
     }
@@ -624,7 +624,7 @@ function renderTripResults(trips) {
     var listEl = document.getElementById('results-list');
     if (!listEl) return;
 
-    var html = trips.map(function(trip, idx) {
+    var html = trips.map(function (trip, idx) {
         var status = isTripClosed(trip) ? 'closed' : 'open';
         var statusLabel = status === 'closed' ? 'Finalizado' : 'Abierto';
         var durationLabel = formatTripDuration(trip.duration_seconds);
@@ -641,17 +641,17 @@ function renderTripResults(trips) {
         return '<div class="result-item result-item-trip' + selectedClass + '" data-trip-id="' + encodedTripId + '">' +
             '<div class="result-index">T' + (idx + 1) + '</div>' +
             '<div class="result-info">' +
-                '<div class="result-coords">' + spanLabel + '</div>' +
-                '<div class="result-device">' + escapeHtml(trip.device || '—') + ' · ' + pointCount + ' pts · ' + durationLabel + '</div>' +
-                '<div class="result-subline">ID ' + safeTripId + '</div>' +
+            '<div class="result-coords">' + spanLabel + '</div>' +
+            '<div class="result-device">' + escapeHtml(trip.device || '—') + ' · ' + pointCount + ' pts · ' + durationLabel + '</div>' +
+            '<div class="result-subline">ID ' + safeTripId + '</div>' +
             '</div>' +
             '<div class="trip-status trip-status-' + status + '">' + statusLabel + '</div>' +
-        '</div>';
+            '</div>';
     }).join('');
 
     listEl.innerHTML = html;
-    Array.from(listEl.querySelectorAll('.result-item-trip')).forEach(function(node) {
-        node.addEventListener('click', function() {
+    Array.from(listEl.querySelectorAll('.result-item-trip')).forEach(function (node) {
+        node.addEventListener('click', function () {
             var encoded = this.getAttribute('data-trip-id') || '';
             selectHistoricTripById(encoded);
         });
@@ -660,7 +660,7 @@ function renderTripResults(trips) {
 
 function refreshTripSelectionUi() {
     var nodes = document.querySelectorAll('#results-list .result-item-trip');
-    Array.from(nodes).forEach(function(node) {
+    Array.from(nodes).forEach(function (node) {
         var encoded = node.getAttribute('data-trip-id') || '';
         var tripId = decodeURIComponent(encoded);
         node.classList.toggle('active', !!histSelectedTripId && tripId === histSelectedTripId);
@@ -714,8 +714,8 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
     fetch('/api/trip-points?trip_id=' + encodeURIComponent(tripId) + '&limit=5000&sample_minutes=' + encodeURIComponent(String(sampleMinutes)), {
         signal: histTripPointsController.signal
     })
-        .then(function(r) {
-            return r.json().then(function(body) {
+        .then(function (r) {
+            return r.json().then(function (body) {
                 if (!r.ok) {
                     var msg = (body && body.error) ? body.error : 'No se pudo cargar el trayecto';
                     throw new Error(msg);
@@ -723,7 +723,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
                 return body;
             });
         })
-        .then(function(payload) {
+        .then(function (payload) {
             if (token !== histQueryToken || tripId !== histSelectedTripId) return;
             var points = payload.data || [];
             var payloadMeta = payload.meta || {};
@@ -758,12 +758,12 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
             summary += ' · precisión ' + getSampleLabel();
             setHistoricStatus(summary + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'), 'var(--green)');
         })
-        .catch(function(err) {
+        .catch(function (err) {
             if (err && err.name === 'AbortError') return;
             setHistoricStatus('Error cargando trayecto', 'var(--red)');
             showToast(err && err.message ? err.message : 'No se pudo cargar el trayecto seleccionado');
         })
-        .finally(function() {
+        .finally(function () {
             histTripPointsController = null;
         });
 }
@@ -795,7 +795,7 @@ function renderHistoricResults(data) {
 
     var loaded = BATCH;
 
-    histListObserver = new IntersectionObserver(function(entries) {
+    histListObserver = new IntersectionObserver(function (entries) {
         if (!entries[0].isIntersecting || loaded >= reversed.length) return;
 
         var nextBatch = reversed.slice(loaded, loaded + BATCH);
@@ -813,16 +813,16 @@ function renderHistoricResults(data) {
 }
 
 function renderResultBatch(batch, total, offset) {
-    return batch.map(function(r, i) {
+    return batch.map(function (r, i) {
         var idx = total - (offset + i);
         return '<div class="result-item" onclick="flyToPoint(' + r.lat + ',' + r.lon + ')">' +
             '<div class="result-index">' + idx + '</div>' +
             '<div class="result-info">' +
-                '<div class="result-coords">' + parseFloat(r.lat).toFixed(5) + ', ' + parseFloat(r.lon).toFixed(5) + '</div>' +
-                '<div class="result-device">' + (r.device || '—') + '</div>' +
+            '<div class="result-coords">' + parseFloat(r.lat).toFixed(5) + ', ' + parseFloat(r.lon).toFixed(5) + '</div>' +
+            '<div class="result-device">' + (r.device || '—') + '</div>' +
             '</div>' +
             '<div class="result-time">' + (r.timestamp ? r.timestamp.substring(11, 16) : '—') + '</div>' +
-        '</div>';
+            '</div>';
     }).join('');
 }
 
@@ -836,7 +836,7 @@ function flyToPoint(lat, lon) {
 // ══════════════════════════════════════════
 
 function clearHistoricLayers() {
-    histMarkers.forEach(function(m) { mapHist.removeLayer(m); });
+    histMarkers.forEach(function (m) { mapHist.removeLayer(m); });
     histMarkers = [];
 
     if (routeLineHist) {
@@ -864,29 +864,32 @@ function clearHistoricLayers() {
  */
 function drawGpsDots(data) {
     clearGpsDots();
-    if (!mapHist || !histCanvasRenderer || !data || !data.length) return;
+    if (!mapHist || !data || !data.length) return;
 
     var pts = data.length > 200 ? samplePoints(data, 200) : data;
 
-    var layer = L.layerGroup();
+    // No custom renderer — use the map's default canvas (preferCanvas: true).
+    // A separate L.canvas() instance can end up below the polyline canvas in the
+    // DOM z-order and become invisible. Sharing the same canvas avoids that entirely.
+    var layers = [];
     for (var i = 0; i < pts.length; i++) {
         var p = pts[i];
         var lat = parseFloat(p.lat);
         var lon = parseFloat(p.lon);
         if (!isFinite(lat) || !isFinite(lon)) continue;
 
-        L.circleMarker([lat, lon], {
-            renderer: histCanvasRenderer,
+        layers.push(L.circleMarker([lat, lon], {
             radius: 6,
             color: '#ffa94d',
             fillColor: '#ffa94d',
             fillOpacity: 0.9,
             weight: 1.5,
             interactive: false   // dots are decorative — clicks fall through to map
-        }).addTo(layer);
+        }));
     }
-    layer.addTo(mapHist);
-    gpsDotLayer = layer;
+
+    if (!layers.length) return;
+    gpsDotLayer = L.layerGroup(layers).addTo(mapHist);
 }
 
 function clearGpsDots() {
@@ -936,9 +939,9 @@ function updateMobileFilterSummary() {
     }
 
     var startDate = currentRange.start.substring(0, 10);
-    var endDate   = currentRange.end.substring(0, 10);
+    var endDate = currentRange.end.substring(0, 10);
     var startTime = currentRange.start.substring(11, 16);
-    var endTime   = currentRange.end.substring(11, 16);
+    var endTime = currentRange.end.substring(11, 16);
 
     var rangeLabel;
     if (startDate === endDate) {
@@ -948,6 +951,16 @@ function updateMobileFilterSummary() {
     }
 
     el.textContent = rangeLabel + ' · ' + getSampleLabel();
+}
+
+/**
+ * Dismiss the instruction banner without deactivating query mode.
+ * The X on the banner should only hide the hint text — dots and click
+ * handler remain active so the user can keep querying after closing it.
+ */
+function closeLqBanner() {
+    var banner = document.getElementById('location-query-banner');
+    if (banner) banner.hidden = true;
 }
 
 /**
@@ -991,9 +1004,8 @@ function onHistMapClick(e) {
     var lat = e.latlng.lat;
     var lon = e.latlng.lng;
 
-    // Immediate visual feedback at click location
+    // Immediate visual feedback at click location — use default map canvas
     locationQuerySpinner = L.circleMarker([lat, lon], {
-        renderer: histCanvasRenderer,
         radius: 9,
         color: '#ffa94d',
         fillColor: '#ffa94d',
@@ -1007,17 +1019,17 @@ function onHistMapClick(e) {
     if (deviceSelect) device = (deviceSelect.value || '').trim();
 
     var url = '/api/nearest-point'
-        + '?lat='    + encodeURIComponent(lat)
-        + '&lon='    + encodeURIComponent(lon)
-        + '&start='  + encodeURIComponent(currentRange.start)
-        + '&end='    + encodeURIComponent(currentRange.end)
+        + '?lat=' + encodeURIComponent(lat)
+        + '&lon=' + encodeURIComponent(lon)
+        + '&start=' + encodeURIComponent(currentRange.start)
+        + '&end=' + encodeURIComponent(currentRange.end)
         + '&radius_km=0.4';
     if (device) url += '&device=' + encodeURIComponent(device);
 
     locationQueryController = new AbortController();
     fetch(url, { signal: locationQueryController.signal })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
             if (locationQuerySpinner && mapHist) {
                 mapHist.removeLayer(locationQuerySpinner);
                 locationQuerySpinner = null;
@@ -1027,7 +1039,7 @@ function onHistMapClick(e) {
                 return;
             }
 
-            var ts   = String(data.timestamp || '');
+            var ts = String(data.timestamp || '');
             var time = ts.length >= 16 ? ts.substring(11, 16) : ts;
             var date = ts.length >= 10 ? ts.substring(0, 10) : '';
             var dist = data.distance_m < 1000
@@ -1045,18 +1057,18 @@ function onHistMapClick(e) {
                 popupAnchor: [0, -14]
             });
             locationQueryMarker = L.marker([data.lat, data.lon], { icon: lqIcon })
-            .bindPopup(
-                '<div class="lq-popup">'
-                + '<div class="lq-popup-time">' + time + '</div>'
-                + '<div class="lq-popup-date">' + date + '</div>'
-                + '<div class="lq-popup-dist">' + dist + '</div>'
-                + '</div>',
-                { maxWidth: 180, className: 'lq-popup-wrap' }
-            )
-            .addTo(mapHist)
-            .openPopup();
+                .bindPopup(
+                    '<div class="lq-popup">'
+                    + '<div class="lq-popup-time">' + time + '</div>'
+                    + '<div class="lq-popup-date">' + date + '</div>'
+                    + '<div class="lq-popup-dist">' + dist + '</div>'
+                    + '</div>',
+                    { maxWidth: 180, className: 'lq-popup-wrap' }
+                )
+                .addTo(mapHist)
+                .openPopup();
         })
-        .catch(function(err) {
+        .catch(function (err) {
             if (locationQuerySpinner && mapHist) {
                 mapHist.removeLayer(locationQuerySpinner);
                 locationQuerySpinner = null;
@@ -1064,7 +1076,7 @@ function onHistMapClick(e) {
             if (err && err.name === 'AbortError') return;
             showToast('No se pudo consultar la posición');
         })
-        .finally(function() {
+        .finally(function () {
             locationQueryController = null;
         });
 }
@@ -1103,15 +1115,15 @@ function drawHistoricRoute(data, token, routeContext) {
         );
     }
 
-    var points = data.map(function(r) { return [parseFloat(r.lat), parseFloat(r.lon)]; });
+    var points = data.map(function (r) { return [parseFloat(r.lat), parseFloat(r.lon)]; });
     var basePoints = points.length > 550 ? samplePoints(points, 550) : points;
     var previewSegments = splitByLargeJumps(basePoints, 28);
     if (!previewSegments.length) {
         previewSegments = [basePoints];
     }
-    var preview = previewSegments.map(function(segment) {
+    var preview = previewSegments.map(function (segment) {
         return smoothPath(segment, { segments: 7, tension: 0.45 });
-    }).filter(function(segment) {
+    }).filter(function (segment) {
         return segment && segment.length > 1;
     });
     if (!preview.length && basePoints.length > 1) {
@@ -1148,7 +1160,7 @@ function drawHistoricRoute(data, token, routeContext) {
         chunkWaypoints: 25,
         chunkOverlap: 1,
         maxChunksPerSegment: 9,
-        onPartialRoute: function(partialRoute) {
+        onPartialRoute: function (partialRoute) {
             if (token !== histQueryToken || !routeLineHist || !partialRoute) return;
             routeLineHist.setStyle({ color: '#5f95ff', weight: 3.5, opacity: 0.86, dashArray: null });
             routeLineHist.setLatLngs(partialRoute);
@@ -1159,7 +1171,7 @@ function drawHistoricRoute(data, token, routeContext) {
                 partialFitted = true;
             }
         }
-    }).then(function(line) {
+    }).then(function (line) {
         if (token !== histQueryToken) {
             if (line) mapHist.removeLayer(line);
             return;
@@ -1369,7 +1381,7 @@ function loadCachedRoute() {
         var cache = JSON.parse(raw);
         if (!cache.points || cache.points.length < 2) return;
 
-        var points = cache.points.map(function(r) {
+        var points = cache.points.map(function (r) {
             return [parseFloat(r.lat), parseFloat(r.lon)];
         });
 
@@ -1390,10 +1402,10 @@ function loadCachedRoute() {
 
         document.getElementById('results-list').innerHTML =
             '<div class="no-data" style="padding:16px;font-size:0.78rem">' +
-                '<div class="no-data-icon">' + SVG_PACKAGE + '</div>' +
-                'Última búsqueda desde caché<br>' +
-                '<span style="color:var(--text-muted);font-size:0.72rem">' + savedAt + '</span><br><br>' +
-                '<span style="color:var(--text-muted)">Realiza una nueva búsqueda para refrescar datos</span>' +
+            '<div class="no-data-icon">' + SVG_PACKAGE + '</div>' +
+            'Última búsqueda desde caché<br>' +
+            '<span style="color:var(--text-muted);font-size:0.72rem">' + savedAt + '</span><br><br>' +
+            '<span style="color:var(--text-muted)">Realiza una nueva búsqueda para refrescar datos</span>' +
             '</div>';
 
         document.getElementById('results-count').textContent = cache.points.length + ' (caché)';
