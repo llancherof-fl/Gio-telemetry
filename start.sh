@@ -31,18 +31,16 @@ fi
 
 cd ~/Gio-telemetry
 
-# 3. Actualizar el codigo desde main
+# 3. Actualizar el codigo desde development
 git fetch origin
-git reset --hard origin/main
-echo "[GIT] Codigo actualizado a la ultima version de main"
+git reset --hard origin/development
+echo "[GIT] Codigo actualizado a la ultima version de development"
 
 # 4. Instalar dependencias (compatible con Python 3.12+ PEP 668)
 if [ -f requirements.txt ]; then
     echo "[PIP] Instalando dependencias..."
-    pip3 install --user --break-system-packages -q -r requirements.txt 2>&1 || \
     pip3 install --user -q -r requirements.txt 2>&1 || \
-    pip3 install --break-system-packages -q -r requirements.txt 2>&1 || \
-    sudo pip3 install --break-system-packages -q -r requirements.txt 2>&1 || \
+    pip3 install -q -r requirements.txt 2>&1 || \
     sudo pip3 install -q -r requirements.txt 2>&1 || \
     echo "[WARN] No se pudieron instalar dependencias pip (el servidor puede funcionar igual)"
     echo "[PIP] Dependencias procesadas"
