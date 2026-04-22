@@ -183,6 +183,18 @@ function toggleRealtimeDetails() {
     }
 }
 
+function toggleMobileFilters() {
+    var histView = document.getElementById('view-historical');
+    if (!histView) return;
+    var isOpen = histView.classList.toggle('filters-open');
+    var btn = document.getElementById('btn-toggle-mobile-filters');
+    if (btn) btn.classList.toggle('btn-active-query', isOpen);
+    updateLayoutOffsets();
+    if (!isOpen && mapHist) {
+        setTimeout(function() { mapHist.invalidateSize(); }, 120);
+    }
+}
+
 function toggleHistoricalPanel() {
     uiPrefs.historicalPanelOpen = !uiPrefs.historicalPanelOpen;
     applyUIPreferences();
@@ -233,6 +245,37 @@ function switchHelpSection(section) {
     });
 }
 
+// ══════════════════════════════════════════
+//  CORRECCIÓN PROFESOR A2: Toggle modo técnico
+// ══════════════════════════════════════════
+
+var DEV_MODE_KEY = 'gio_dev_mode_v1';
+
+function initDevMode() {
+    try {
+        var saved = localStorage.getItem(DEV_MODE_KEY);
+        if (saved === 'true') {
+            document.body.classList.add('dev-mode');
+            var btn = document.getElementById('dev-toggle');
+            if (btn) btn.classList.add('active');
+        }
+    } catch (e) {
+        // ignore storage issues
+    }
+}
+
+function toggleDevMode() {
+    var isNowDev = document.body.classList.toggle('dev-mode');
+    var btn = document.getElementById('dev-toggle');
+    if (btn) btn.classList.toggle('active', isNowDev);
+    try {
+        localStorage.setItem(DEV_MODE_KEY, String(isNowDev));
+    } catch (e) {
+        // ignore storage limits
+    }
+    showToast(isNowDev ? 'Modo técnico activado' : 'Modo técnico desactivado');
+}
+
 /**
  * Initialize everything when the page loads.
  */
@@ -240,6 +283,7 @@ function switchHelpSection(section) {
     initMaps();
     loadUIPreferences();
     applyUIPreferences();
+    initDevMode();  // === CORRECCIÓN PROFESOR A2 ===
 
     // Restore soft state from local cache
     loadCachedRoute();
@@ -283,3 +327,4 @@ function switchHelpSection(section) {
         });
     }
 })();
+

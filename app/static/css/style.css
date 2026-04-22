@@ -28,13 +28,16 @@
     --layout-offset-mobile: 276px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     height: 100%;
 }
 
@@ -146,6 +149,7 @@ body {
         opacity: 0;
         transform: translateY(4px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -767,6 +771,7 @@ input:disabled {
         opacity: 0;
         transform: translateY(8px) scale(0.98);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -953,6 +958,7 @@ input:disabled {
     0% {
         background-position: 200% 0;
     }
+
     100% {
         background-position: -200% 0;
     }
@@ -1381,3 +1387,232 @@ input:disabled {
     border-top: 1px solid var(--border);
     padding-top: 5px;
 }
+
+/* ══════════════════════════════════════════
+   LOCATION QUERY — RESULT MARKER (divIcon)
+   ══════════════════════════════════════════ */
+
+.lq-result-icon {
+    background: transparent;
+    border: none;
+}
+
+/* ══════════════════════════════════════════
+   MOBILE FILTER BAR — compact always-visible strip
+   ══════════════════════════════════════════ */
+
+/* Hidden on desktop — shown only on mobile via media query below */
+.mobile-filter-bar {
+    display: none;
+}
+
+/* Full controls always visible on desktop */
+.hist-controls-collapse {
+    display: contents;
+}
+
+@media (max-width: 960px) {
+
+    /* Show compact strip on mobile */
+    .mobile-filter-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        padding: 2px 0;
+    }
+
+    .mobile-filter-summary {
+        flex: 1;
+        font-size: 0.74rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    .mobile-filter-bar-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    /* Full controls collapsed by default on mobile */
+    .hist-controls-collapse {
+        display: none;
+        width: 100%;
+    }
+
+    /* Expand when view has .filters-open */
+    #view-historical.filters-open .hist-controls-collapse {
+        display: block;
+    }
+}
+
+/* ══════════════════════════════════════════
+   CORRECCIÓN PROFESOR A2: Toggle modo técnico
+   ══════════════════════════════════════════ */
+
+.dev-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dev-toggle:hover {
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+}
+
+.dev-toggle.active {
+    background: rgba(91, 185, 255, 0.12);
+    border-color: rgba(91, 185, 255, 0.44);
+    color: var(--blue-strong);
+}
+
+.dev-only {
+    transition: opacity 0.2s ease, max-height 0.2s ease;
+}
+
+body:not(.dev-mode) .dev-only {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+}
+
+/* ══════════════════════════════════════════
+   CORRECCIÓN PROFESOR A5: Móvil — mapa visible sin scroll
+   ══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    .top-nav {
+        min-height: 46px;
+        padding: 0 12px;
+    }
+
+    .nav-brand {
+        font-size: 0.8rem;
+    }
+
+    .nav-tabs {
+        padding: 2px;
+    }
+
+    .nav-tab {
+        padding: 5px 12px;
+        font-size: 0.75rem;
+    }
+
+    .view {
+        padding: 10px;
+    }
+
+    .rt-map-card,
+    .hist-map-card {
+        min-height: 55vh;
+    }
+
+    .map-wrap {
+        min-height: 55vh;
+    }
+
+    #map-rt,
+    #map-hist {
+        height: calc(100% - 38px) !important;
+    }
+
+    .card-header {
+        padding: 8px 12px;
+        font-size: 0.72rem;
+    }
+
+    .live-panel {
+        padding: 10px;
+        gap: 8px;
+    }
+
+    .live-field {
+        padding: 8px 10px;
+    }
+
+    .live-field .val {
+        font-size: 0.85rem;
+    }
+
+    .hist-map-card {
+        min-height: 50vh;
+    }
+
+    .results-panel {
+        min-height: 300px;
+        max-height: 300px;
+    }
+
+    .footer {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .top-nav {
+        min-height: 42px;
+    }
+
+    .nav-brand .brand-sub {
+        display: none;
+    }
+
+    .rt-map-card {
+        min-height: 50vh;
+    }
+
+    .map-wrap {
+        min-height: 50vh;
+    }
+
+    .dev-toggle span {
+        display: none;
+    }
+}
+
+/* ══════════════════════════════════════════
+   CORRECCIÓN PROFESOR: Tooltip Help Icon
+   ══════════════════════════════════════════ */
+
+.help-tooltip-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(91, 185, 255, 0.15);
+    border: 1px solid rgba(91, 185, 255, 0.3);
+    color: var(--blue-strong);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: help;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-left: 2px;
+}
+
+.help-tooltip-icon:hover {
+    background: var(--blue-soft-2);
+    border-color: var(--blue-strong);
+    transform: scale(1.1);
+}
+
