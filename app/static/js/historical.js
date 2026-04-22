@@ -290,6 +290,8 @@ function applyQuickRange(val) {
         yesterdayEnd.setHours(23, 59, 59, 999);
         currentRange.start = toLocalISO(start);
         currentRange.end = toLocalISO(yesterdayEnd);
+        // === CORRECCIÓN PROFESOR A1: Búsqueda automática ===
+        runHistoricQuery();
         return;
     } else if (val === 'week') {
         start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -297,6 +299,8 @@ function applyQuickRange(val) {
 
     currentRange.start = toLocalISO(start);
     currentRange.end = toLocalISO(new Date());
+    // === CORRECCIÓN PROFESOR A1: Búsqueda automática ===
+    runHistoricQuery();
 }
 
 // ══════════════════════════════════════════
@@ -1334,11 +1338,11 @@ function validateModalDates() {
         return false;
     }
 
-    var maxRangeMs = 14 * 24 * 60 * 60 * 1000;
+    var maxRangeMs = 31 * 24 * 60 * 60 * 1000;
     if ((endDate.getTime() - startDate.getTime()) > maxRangeMs) {
         endInput.classList.add('input-error');
         if (errorEl) {
-            errorEl.textContent = 'Selecciona un rango máximo de 14 días para mantener respuesta rápida';
+            errorEl.textContent = 'Selecciona un rango máximo de 31 días para mantener respuesta rápida';
             errorEl.classList.add('show');
         }
         if (applyBtn) applyBtn.disabled = true;

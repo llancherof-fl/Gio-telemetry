@@ -16,8 +16,9 @@ var SVG_PACKAGE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" s
  */
 function toLocalISO(d) {
     var pad = function(n) { return String(n).padStart(2, '0'); };
+    // === CORRECCIÓN PROFESOR A4: Segundos siempre 00 ===
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-           'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+           'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':00';
 }
 
 /**

@@ -208,7 +208,7 @@ if __name__ == '__main__':
     print(f'  Dashboard real en: http://localhost:{PORT_WEB}')
     print()
     print('  Datos simulados: 60 puntos, 1 trayecto (trip-2026-0001)')
-    print('  Para probar ¿Cuándo pasó?: Histórico → Buscar → botón mira → click mapa')
+    print('  Para probar ¿Cuándo pasó?: Histórico -> Buscar -> botón mira -> click mapa')
     print('  El OSRM proxy está desactivado — el frontend usa spline fallback')
     print()
     app.run(host=HOST, port=PORT_WEB, debug=True, use_reloader=True)

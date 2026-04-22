@@ -856,24 +856,24 @@ function renderRealtimePanels(data, lat, lon) {
 
     if (routeInfo) {
         routeInfo.innerHTML =
-            '<div class="live-grid">' +
+            '<div class="live-grid dev-only">' +
                 '<div class="live-field"><div class="lbl">Puntos sesión</div><div class="val">' + sessionPoints.length + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Inicio sesión</div><div class="val" style="font-size:0.74rem">' + startedLabel + '</div></div>' +
             '</div>' +
-            '<div class="live-grid">' +
+            '<div class="live-grid dev-only">' +
                 '<div class="live-field"><div class="lbl">OSRM</div><div class="val" style="font-size:0.72rem">' + osrmStatus + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Método</div><div class="val">' + methodLabel + '</div></div>' +
             '</div>' +
-            '<div class="live-grid">' +
+            '<div class="live-grid dev-only">' +
                 '<div class="live-field"><div class="lbl">Llamadas</div><div class="val">' + osrmCalls + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Evento / Seq</div><div class="val">' + eventLabel + ' · ' + seqLabel + '</div></div>' +
             '</div>' +
-            '<div class="live-grid">' +
+            '<div class="live-grid dev-only">' +
                 '<div class="live-field"><div class="lbl">Fin sesión</div><div class="val" style="font-size:0.74rem">' + endedLabel + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Modo</div><div class="val">Tiempo real</div></div>' +
             '</div>' +
-            '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">' + tripNote + '</p>' +
-            '<p style="font-size:0.71rem;color:var(--text-muted);margin-top:0;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
+            '<p class="dev-only" style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;padding:0 2px">' + tripNote + '</p>' +
+            '<p class="dev-only" style="font-size:0.71rem;color:var(--text-muted);margin-top:0;padding:0 2px">Se guarda una caché corta para mejorar apertura y continuidad visual.</p>';
     }
 }
 
