@@ -32,6 +32,7 @@ var locationQueryMarker = null;
 var locationQuerySpinner = null;
 var locationQueryController = null;
 var locationQueryData = null;   // raw GPS points of the current route (for dot overlay)
+var locationQueryBannerDismissed = false;  // stays true once user closes the hint
 
 // ══════════════════════════════════════════
 //  FILTERS
@@ -965,6 +966,7 @@ function updateMobileFilterSummary() {
 function closeLqBanner() {
     var banner = document.getElementById('location-query-banner');
     if (banner) banner.hidden = true;
+    locationQueryBannerDismissed = true;
 }
 
 /**
@@ -983,7 +985,7 @@ function toggleLocationQueryMode() {
 
     if (locationQueryMode) {
         if (mapEl) mapEl.classList.add('query-mode');
-        if (banner) banner.hidden = false;
+        if (banner && !locationQueryBannerDismissed) banner.hidden = false;
         drawGpsDots(locationQueryData);
         mapHist.on('click', onHistMapClick);
     } else {

@@ -1304,6 +1304,7 @@ input:disabled {
 }
 
 /* Banner shown on top of the map on mobile (and desktop when mode is on) */
+.location-query-banner[hidden] { display: none; }
 .location-query-banner {
     position: absolute;
     top: 8px;

@@ -64,9 +64,9 @@ def receive_sensor_data():
         # Console log for monitoring
         status_str = ""
         if evento_frenada:
-            status_str += " ⚠️FRENADA"
+            status_str += " [FRENADA]"
         if evento_giro:
-            status_str += " ⚠️GIRO"
+            status_str += " [GIRO]"
         print(f"[SENSOR] {vehicle_id}: ax={ax:.3f} ay={ay:.3f} az={az:.3f}{status_str}")
 
         return jsonify({
