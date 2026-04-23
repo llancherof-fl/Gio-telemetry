@@ -1497,6 +1497,12 @@ body:not(.dev-mode) .dev-only {
    CORRECCIÓN PROFESOR A5: Móvil — mapa visible sin scroll
    ══════════════════════════════════════════ */
 
+.dev-toggle svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
     .top-nav {
         min-height: 46px;
