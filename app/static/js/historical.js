@@ -22,6 +22,7 @@ var histQueryToken = 0;
 var histTrips = [];
 var histTripPointsCache = {};
 var histTripEventsCache = {};
+var histRangeSensorEvents = [];
 var histSelectedTripId = '';
 var histSelectedTrip = null;
 var histPreferredTripId = '';
@@ -35,6 +36,16 @@ var locationQueryMarker = null;
 var locationQuerySpinner = null;
 var locationQueryController = null;
 var locationQueryData = null;   // raw GPS points of the current route (for dot overlay)
+
+// ── Route sequence state ("video" scrubber) ──
+var histSequenceData = [];
+var histSequenceLatLngs = [];
+var histSequenceIndex = 0;
+var histSequenceLine = null;
+var histSequenceMarker = null;
+var histSequencePlaying = false;
+var histSequenceTimer = null;
+var HIST_SEQUENCE_STEP_MS = 420;
 
 // ══════════════════════════════════════════
 //  FILTERS
@@ -213,11 +224,11 @@ function refreshHistoricalModeLabels() {
             : 'Paso aplicado al rango completo (menos ruido y menor carga).';
     }
     if (sensorPanel) {
-        sensorPanel.hidden = !isTripsMode;
+        sensorPanel.hidden = false;
     }
     if (!isTripsMode) {
-        clearSensorEventsUi();
         clearSensorEventMarkers();
+        histShowEventMarkers = false;
     }
     if (typeof updateHistoricalPanelButton === 'function') {
         updateHistoricalPanelButton();
@@ -418,6 +429,7 @@ function runHistoricQuery() {
     histTrips = [];
     histTripPointsCache = {};
     histTripEventsCache = {};
+    histRangeSensorEvents = [];
     histSelectedTripId = '';
     histSelectedTrip = null;
     histPreferredTripId = requestedTripId;
@@ -486,16 +498,15 @@ function runHistoricPointsQuery(response, token) {
             '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin registros en ese período</div>';
         document.getElementById('results-count').textContent = '0';
         setHistoricStatus('Sin registros', 'var(--text-muted)');
-        clearSensorEventsUi();
-        clearSensorEventMarkers();
+        loadRangeSensorEvents();
         return;
     }
 
-    clearSensorEventsUi();
     clearSensorEventMarkers();
     renderHistoricResults(data);
     drawHistoricRoute(data, token);
     saveToCache(data, meta);
+    loadRangeSensorEvents();
 
     // Auto-collapse filter panel on mobile after successful search
     if (window.innerWidth <= 960 && typeof toggleMobileFilters === 'function') {
@@ -518,6 +529,7 @@ function runHistoricPointsQuery(response, token) {
 }
 
 function runHistoricTripsQuery(response, token) {
+    histRangeSensorEvents = [];
     var trips = response.data || [];
     var meta = response.meta || {};
     histTrips = trips.slice();
@@ -643,7 +655,9 @@ function clearSensorEventsUi() {
     var summary = document.getElementById('sensor-events-summary');
     var list = document.getElementById('sensor-events-list');
     var toggleBtn = document.getElementById('btn-toggle-event-markers');
-    if (summary) summary.textContent = 'Sin trayecto seleccionado.';
+    var isTripsMode = getHistoricalDataMode() === HIST_MODE_TRIPS;
+    histRangeSensorEvents = [];
+    if (summary) summary.textContent = isTripsMode ? 'Sin trayecto seleccionado.' : 'Sin consulta activa para este rango.';
     if (list) list.innerHTML = '';
     if (toggleBtn) {
         toggleBtn.disabled = true;
@@ -714,6 +728,10 @@ function renderSensorEvents(trip, events) {
     var toggleBtn = document.getElementById('btn-toggle-event-markers');
     if (!summary || !list || !toggleBtn) return;
 
+    if (!trip) {
+        histRangeSensorEvents = events.slice();
+    }
+
     var braking = 0;
     var turning = 0;
     var withCoords = 0;
@@ -729,7 +747,10 @@ function renderSensorEvents(trip, events) {
     toggleBtn.textContent = histShowEventMarkers ? 'Ocultar en mapa' : 'Mostrar en mapa';
 
     if (!events.length) {
-        list.innerHTML = '<div class="no-data" style="padding:10px 8px">Sin eventos detectados en este trayecto.</div>';
+        var emptyLabel = trip
+            ? 'Sin eventos detectados en este trayecto.'
+            : 'Sin eventos detectados en este rango.';
+        list.innerHTML = '<div class="no-data" style="padding:10px 8px">' + emptyLabel + '</div>';
         clearSensorEventMarkers();
         return;
     }
@@ -805,11 +826,49 @@ function loadTripSensorEvents(trip) {
         });
 }
 
+function loadRangeSensorEvents() {
+    if (!currentRange.start || !currentRange.end) {
+        clearSensorEventsUi();
+        clearSensorEventMarkers();
+        return;
+    }
+
+    var summary = document.getElementById('sensor-events-summary');
+    if (summary) summary.textContent = 'Cargando eventos del rango...';
+
+    var params = [
+        'start=' + encodeURIComponent(currentRange.start),
+        'end=' + encodeURIComponent(currentRange.end),
+        'limit=400'
+    ];
+
+    fetch('/api/sensor/events?' + params.join('&'))
+        .then(function(r) {
+            if (!r.ok) throw new Error('sensor_events_http_' + r.status);
+            return r.json();
+        })
+        .then(function(payload) {
+            var events = (payload && payload.events) ? payload.events : [];
+            renderSensorEvents(null, events);
+        })
+        .catch(function() {
+            if (summary) summary.textContent = 'No se pudo cargar eventos de sensor.';
+            clearSensorEventMarkers();
+        });
+}
+
 function toggleSensorEventMarkers() {
     histShowEventMarkers = !histShowEventMarkers;
+    var mode = getHistoricalDataMode();
+    if (mode === HIST_MODE_POINTS) {
+        renderSensorEvents(null, histRangeSensorEvents || []);
+        return;
+    }
+
     var trip = histSelectedTrip;
     if (!trip || !trip.trip_id) {
         histShowEventMarkers = false;
+        clearSensorEventMarkers();
         return;
     }
     var events = histTripEventsCache[String(trip.trip_id)] || [];
@@ -1036,11 +1095,193 @@ function flyToPoint(lat, lon) {
     mapHist.flyTo([lat, lon], Math.max(mapHist.getZoom(), 15), { duration: 0.55 });
 }
 
+function formatHistoricSequenceLabel(row, index, total) {
+    if (!row) return '—';
+    var ts = row.timestamp ? String(row.timestamp) : '';
+    var timeLabel = ts.length >= 19 ? ts.substring(11, 19) : (ts.length >= 16 ? ts.substring(11, 16) : ts || '—');
+    return (index + 1) + '/' + total + ' · ' + timeLabel;
+}
+
+function stopHistoricSequencePlayback(silent) {
+    if (histSequenceTimer) {
+        clearInterval(histSequenceTimer);
+        histSequenceTimer = null;
+    }
+    histSequencePlaying = false;
+    var playBtn = document.getElementById('btn-hist-seq-play');
+    if (playBtn) {
+        playBtn.textContent = 'Reproducir';
+    }
+    if (!silent && histSequenceData.length > 1 && histSequenceIndex >= (histSequenceData.length - 1)) {
+        showToast('Secuencia completada');
+    }
+}
+
+function clearHistoricSequenceLayers() {
+    if (histSequenceLine && mapHist) {
+        mapHist.removeLayer(histSequenceLine);
+        histSequenceLine = null;
+    }
+    if (histSequenceMarker && mapHist) {
+        mapHist.removeLayer(histSequenceMarker);
+        histSequenceMarker = null;
+    }
+}
+
+function resetHistoricSequenceUi() {
+    stopHistoricSequencePlayback(true);
+    clearHistoricSequenceLayers();
+    histSequenceData = [];
+    histSequenceLatLngs = [];
+    histSequenceIndex = 0;
+
+    var controls = document.getElementById('hist-seq-controls');
+    var playBtn = document.getElementById('btn-hist-seq-play');
+    var slider = document.getElementById('hist-seq-slider');
+    var label = document.getElementById('hist-seq-label');
+
+    if (controls) controls.hidden = true;
+    if (playBtn) playBtn.disabled = true;
+    if (slider) {
+        slider.min = '0';
+        slider.max = '0';
+        slider.value = '0';
+        slider.disabled = true;
+    }
+    if (label) label.textContent = '—';
+}
+
+function renderHistoricSequenceAtIndex(nextIndex, options) {
+    if (!mapHist || !histSequenceData.length || !histSequenceLatLngs.length) return;
+
+    var index = Math.max(0, Math.min(histSequenceData.length - 1, parseInt(nextIndex, 10) || 0));
+    histSequenceIndex = index;
+
+    var slider = document.getElementById('hist-seq-slider');
+    var label = document.getElementById('hist-seq-label');
+    if (slider) slider.value = String(index);
+    if (label) label.textContent = formatHistoricSequenceLabel(histSequenceData[index], index, histSequenceData.length);
+
+    var partial = histSequenceLatLngs.slice(0, index + 1);
+    if (partial.length > 1) {
+        if (!histSequenceLine) {
+            histSequenceLine = L.polyline(partial, {
+                color: '#8ad5ff',
+                weight: 4.4,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(mapHist);
+        } else {
+            histSequenceLine.setLatLngs(partial);
+        }
+    } else if (histSequenceLine) {
+        mapHist.removeLayer(histSequenceLine);
+        histSequenceLine = null;
+    }
+
+    var currentPoint = histSequenceLatLngs[index];
+    if (currentPoint) {
+        if (!histSequenceMarker) {
+            histSequenceMarker = L.circleMarker(currentPoint, {
+                radius: 6,
+                color: '#22d3ee',
+                fillColor: '#22d3ee',
+                fillOpacity: 0.95,
+                weight: 1.6
+            }).addTo(mapHist);
+        } else {
+            histSequenceMarker.setLatLng(currentPoint);
+        }
+
+        if (options && options.focus) {
+            mapHist.panTo(currentPoint, { animate: true, duration: 0.25 });
+        }
+    }
+
+    if (histSequencePlaying && index >= (histSequenceData.length - 1)) {
+        stopHistoricSequencePlayback();
+    }
+}
+
+function prepareHistoricSequence(data) {
+    stopHistoricSequencePlayback(true);
+    clearHistoricSequenceLayers();
+
+    var controls = document.getElementById('hist-seq-controls');
+    var playBtn = document.getElementById('btn-hist-seq-play');
+    var slider = document.getElementById('hist-seq-slider');
+    var label = document.getElementById('hist-seq-label');
+    if (!controls || !playBtn || !slider || !label) return;
+
+    var normalized = [];
+    (data || []).forEach(function(row) {
+        var lat = parseFloat(row.lat);
+        var lon = parseFloat(row.lon);
+        if (!isFinite(lat) || !isFinite(lon)) return;
+        normalized.push({
+            lat: lat,
+            lon: lon,
+            timestamp: row.timestamp || ''
+        });
+    });
+
+    histSequenceData = normalized;
+    histSequenceLatLngs = normalized.map(function(row) { return [row.lat, row.lon]; });
+
+    if (!histSequenceData.length) {
+        resetHistoricSequenceUi();
+        return;
+    }
+
+    controls.hidden = false;
+    slider.min = '0';
+    slider.max = String(Math.max(0, histSequenceData.length - 1));
+    slider.step = '1';
+    slider.disabled = histSequenceData.length < 2;
+    playBtn.disabled = histSequenceData.length < 2;
+
+    renderHistoricSequenceAtIndex(histSequenceData.length - 1, { focus: false });
+}
+
+function onHistoricSequenceSliderInput(rawValue) {
+    stopHistoricSequencePlayback(true);
+    renderHistoricSequenceAtIndex(rawValue, { focus: false });
+}
+
+function toggleHistoricSequencePlayback() {
+    if (!histSequenceData.length || histSequenceData.length < 2) return;
+
+    var playBtn = document.getElementById('btn-hist-seq-play');
+    if (histSequencePlaying) {
+        stopHistoricSequencePlayback(true);
+        return;
+    }
+
+    if (histSequenceIndex >= (histSequenceData.length - 1)) {
+        renderHistoricSequenceAtIndex(0, { focus: true });
+    }
+
+    histSequencePlaying = true;
+    if (playBtn) playBtn.textContent = 'Pausar';
+
+    histSequenceTimer = setInterval(function() {
+        if (!histSequencePlaying) return;
+        renderHistoricSequenceAtIndex(histSequenceIndex + 1, { focus: true });
+    }, HIST_SEQUENCE_STEP_MS);
+}
+
 // ══════════════════════════════════════════
 //  HISTORIC ROUTE DRAWING
 // ══════════════════════════════════════════
 
 function clearHistoricLayers() {
+    stopHistoricSequencePlayback(true);
+    clearHistoricSequenceLayers();
+    histSequenceData = [];
+    histSequenceLatLngs = [];
+    histSequenceIndex = 0;
+
     histMarkers.forEach(function (m) { mapHist.removeLayer(m); });
     histMarkers = [];
 
@@ -1057,6 +1298,22 @@ function clearHistoricLayers() {
     historicRouteBounds = null;
     updateHistoricFitButtonState(false);
     updateLocationQueryButton();
+    var controls = document.getElementById('hist-seq-controls');
+    var slider = document.getElementById('hist-seq-slider');
+    var playBtn = document.getElementById('btn-hist-seq-play');
+    var label = document.getElementById('hist-seq-label');
+    if (controls) controls.hidden = true;
+    if (slider) {
+        slider.min = '0';
+        slider.max = '0';
+        slider.value = '0';
+        slider.disabled = true;
+    }
+    if (playBtn) {
+        playBtn.disabled = true;
+        playBtn.textContent = 'Reproducir';
+    }
+    if (label) label.textContent = '—';
 }
 
 // ══════════════════════════════════════════
@@ -1294,6 +1551,7 @@ function drawHistoricRoute(data, token, routeContext) {
     // Store reference so GPS dot overlay and query mode can use it
     locationQueryData = data;
     updateLocationQueryButton();
+    prepareHistoricSequence(data);
 
     // On mobile, always surface the map pane when a route is about to draw
     if (window.innerWidth <= 960 && typeof switchHistoricalMobilePane === 'function') {

@@ -1398,6 +1398,33 @@ input:disabled {
     background: rgba(255, 169, 77, 0.25);
 }
 
+.hist-seq-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 7px;
+    border: 1px solid rgba(54, 79, 131, 0.34);
+    border-radius: 999px;
+    background: rgba(9, 18, 34, 0.72);
+}
+
+#hist-seq-slider {
+    width: 150px;
+    accent-color: #5bb9ff;
+}
+
+.hist-seq-label {
+    min-width: 92px;
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-family: 'Roboto Mono', monospace;
+    text-align: right;
+}
+
+.hist-seq-controls .btn.btn-sm {
+    white-space: nowrap;
+}
+
 /* ══════════════════════════════════════════
    LOCATION QUERY — CROSSHAIR + BANNER + POPUP
    ══════════════════════════════════════════ */
@@ -1653,6 +1680,15 @@ body:not(.dev-mode) .dev-only {
     .live-panel {
         padding: 10px;
         gap: 8px;
+    }
+
+    #hist-seq-slider {
+        width: 108px;
+    }
+
+    .hist-seq-label {
+        min-width: 72px;
+        font-size: 0.64rem;
     }
 
     .live-field {

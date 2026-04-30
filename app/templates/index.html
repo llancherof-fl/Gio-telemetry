@@ -227,6 +227,11 @@
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="22"/><line x1="2" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="22" y2="12"/></svg>
                         ¿Cuándo pasó?
                     </button>
+                    <div class="hist-seq-controls" id="hist-seq-controls" hidden>
+                        <button class="btn btn-outline btn-sm" id="btn-hist-seq-play" onclick="toggleHistoricSequencePlayback()" disabled>Reproducir</button>
+                        <input type="range" id="hist-seq-slider" min="0" max="0" step="1" value="0" oninput="onHistoricSequenceSliderInput(this.value)" disabled>
+                        <span class="hist-seq-label" id="hist-seq-label">—</span>
+                    </div>
                     <span id="hist-status" class="inline-status"></span>
                 </div>
             </div>
@@ -338,6 +343,7 @@
                 <ul>
                     <li>Usa el selector <b>Trayectos/Puntos</b> para alternar entre sesiones reales o lista cruda.</li>
                     <li>En modo <b>Trayectos</b>, selecciona una sesión para pintar su ruta exacta.</li>
+                    <li>Usa el control <b>Reproducir + slider</b> para recorrer la ruta por secuencia y ver a qué hora pasó en cada punto.</li>
                     <li>Abajo del panel derecho se resume la cantidad de <b>frenadas y giros</b> detectados.</li>
                     <li>Pin verde: inicio de sesión. Pin rojo: fin de sesión.</li>
                     <li>Si cambias filtros, presiona <b>Buscar</b> para recalcular.</li>
