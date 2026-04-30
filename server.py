@@ -21,7 +21,7 @@ except ImportError:
 
 from app import create_app
 from app.config import Config
-from app.database import insert_data_batch
+from app.database import insert_data_batch, insert_sensor_batch
 
 
 _ingest_queue = Queue(maxsize=max(1000, Config.UDP_QUEUE_MAX))
@@ -29,7 +29,8 @@ _ingest_stats = {
     'received': 0,
     'queued': 0,
     'dropped': 0,
-    'inserted': 0,
+    'gps_inserted': 0,
+    'sensor_inserted': 0,
 }
 
 
@@ -79,8 +80,10 @@ def db_writer():
             continue
 
         try:
-            inserted = insert_data_batch(pending)
-            _ingest_stats['inserted'] += inserted
+            gps_inserted = insert_data_batch(pending)
+            sensor_inserted = insert_sensor_batch(pending)
+            _ingest_stats['gps_inserted'] += gps_inserted
+            _ingest_stats['sensor_inserted'] += sensor_inserted
         except Exception as e:
             print(f"[DB-WRITER] Error insertando batch: {e}")
         finally:
@@ -90,10 +93,11 @@ def db_writer():
         if (_ingest_stats['received'] % log_every) == 0 and _ingest_stats['received'] > 0:
             print(
                 "[INGEST] recv={received} queued={queued} inserted={inserted} "
-                "drop={dropped} qsize={qsize}".format(
+                "sensor={sensor} drop={dropped} qsize={qsize}".format(
                     received=_ingest_stats['received'],
                     queued=_ingest_stats['queued'],
-                    inserted=_ingest_stats['inserted'],
+                    inserted=_ingest_stats['gps_inserted'],
+                    sensor=_ingest_stats['sensor_inserted'],
                     dropped=_ingest_stats['dropped'],
                     qsize=_ingest_queue.qsize(),
                 )
@@ -130,6 +134,14 @@ def udp_sniffer():
                         'seq': payload.get('seq'),
                         'reason': payload.get('reason'),
                         'client_ts_ms': payload.get('client_ts_ms'),
+                        'ax': payload.get('ax'),
+                        'ay': payload.get('ay'),
+                        'az': payload.get('az'),
+                        'gx': payload.get('gx'),
+                        'gy': payload.get('gy'),
+                        'gz': payload.get('gz'),
+                        'sensor_ts_ms': payload.get('sensor_ts_ms'),
+                        'sensor_source': payload.get('sensor_source'),
                     }
                     _ingest_stats['received'] += 1
                     _enqueue_packet(packet)

@@ -587,15 +587,111 @@ body {
     padding: 6px;
 }
 
+.sensor-events-panel {
+    border-top: 1px solid var(--border);
+    background: rgba(8, 15, 30, 0.6);
+    padding: 8px;
+    max-height: 38%;
+    min-height: 132px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sensor-events-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sensor-events-summary {
+    font-size: 0.69rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.sensor-events-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sensor-event-item {
+    border: 1px solid rgba(65, 95, 151, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 7px 8px;
+    background: rgba(9, 18, 34, 0.76);
+}
+
+.sensor-event-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sensor-event-time {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-family: 'Roboto Mono', monospace;
+}
+
+.sensor-event-tags {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.sensor-tag {
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 0.62rem;
+    font-family: 'Roboto Mono', monospace;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: var(--text-muted);
+    background: rgba(148, 163, 184, 0.1);
+}
+
+.sensor-tag-brake {
+    color: var(--orange);
+    border-color: rgba(255, 180, 87, 0.42);
+    background: rgba(255, 180, 87, 0.12);
+}
+
+.sensor-tag-turn {
+    color: var(--blue-strong);
+    border-color: rgba(91, 185, 255, 0.4);
+    background: rgba(91, 185, 255, 0.13);
+}
+
+.sensor-event-coords {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    font-family: 'Roboto Mono', monospace;
+}
+
 .hist-layout.panel-collapsed {
     grid-template-columns: minmax(0, 1fr) 52px;
 }
 
 .hist-layout.panel-collapsed .results-title,
 .hist-layout.panel-collapsed .results-count,
-.hist-layout.panel-collapsed .results-list {
+.hist-layout.panel-collapsed .results-list,
+.hist-layout.panel-collapsed .sensor-events-panel {
     opacity: 0;
     pointer-events: none;
+}
+
+.hist-layout.panel-collapsed .sensor-events-panel {
+    max-height: 0;
+    min-height: 0;
+    padding: 0;
+    border-top: none;
 }
 
 .hist-layout.panel-collapsed .results-header {
@@ -1102,6 +1198,11 @@ input:disabled {
         max-height: 46vh;
     }
 
+    .sensor-events-panel {
+        max-height: 45%;
+        min-height: 140px;
+    }
+
     .hist-layout.panel-collapsed .results-panel {
         min-height: 58px;
         max-height: 58px;
@@ -1221,6 +1322,10 @@ input:disabled {
     .results-panel {
         min-height: 50vh;
         max-height: 50vh;
+    }
+
+    .sensor-events-summary {
+        font-size: 0.67rem;
     }
 
     .modal-help {
@@ -1621,4 +1726,4 @@ body:not(.dev-mode) .dev-only {
     border-color: var(--blue-strong);
     transform: scale(1.1);
 }
-
+

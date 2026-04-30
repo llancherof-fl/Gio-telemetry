@@ -52,6 +52,8 @@ class Config:
     HISTORY_OUTLIER_MIN_JUMP_KM = float(os.environ.get('HISTORY_OUTLIER_MIN_JUMP_KM', 5))
     DEVICES_CACHE_TTL = int(os.environ.get('DEVICES_CACHE_TTL', 45))
     STATS_CACHE_INTERVAL = 30  # seconds
+    SENSOR_BRAKE_AX_G = float(os.environ.get('SENSOR_BRAKE_AX_G', 0.45))
+    SENSOR_TURN_GZ_DPS = float(os.environ.get('SENSOR_TURN_GZ_DPS', 45.0))
 
     # ── UDP ingestion (queue + batch write) ──
     UDP_QUEUE_MAX = int(os.environ.get('UDP_QUEUE_MAX', 20000))

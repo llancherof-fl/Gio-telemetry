@@ -33,7 +33,8 @@ cd ~/Gio-telemetry
 
 # 3. Actualizar el codigo desde main
 git fetch origin
-git reset --hard origin/main
+git checkout main
+git pull --ff-only origin main
 echo "[GIT] Codigo actualizado a la ultima version de main"
 
 # 4. Instalar dependencias (compatible con Python 3.12+ PEP 668)
