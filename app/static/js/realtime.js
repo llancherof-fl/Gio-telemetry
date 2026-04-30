@@ -45,6 +45,7 @@ var RT_FETCH_TIMEOUT_MS = 6000;
 var RT_TELEPORT_MAX_SPEED_KMH = 260;
 var RT_TELEPORT_HARD_JUMP_KM = 120;
 var RT_TELEPORT_TOAST_COOLDOWN_MS = 15000;
+var RT_SENSOR_REFRESH_MS = 2500;
 var RT_EVENT_START = 'trip_start';
 var RT_EVENT_POSITION = 'position';
 var RT_EVENT_END = 'trip_end';
@@ -89,6 +90,9 @@ var rtOsrmReqOk = 0;
 var rtOsrmReqFail = 0;
 var rtOsrmLastAttemptAt = 0;
 var rtOsrmLastSuccessAt = 0;
+var latestSensor = null;
+var lastSensorFetchAt = 0;
+var sensorFetchInFlight = false;
 
 /**
  * Initialize real-time polling with visibility detection and map interaction hooks.
@@ -582,6 +586,9 @@ function resetRealtimeRouteState(message) {
     rtOsrmReqFail = 0;
     rtOsrmLastAttemptAt = 0;
     rtOsrmLastSuccessAt = 0;
+    latestSensor = null;
+    lastSensorFetchAt = 0;
+    sensorFetchInFlight = false;
     resetRealtimeTripMeta();
 
     var routeInfo = document.getElementById('route-info');
@@ -650,6 +657,7 @@ function fetchLatest() {
             }
 
             var tripPayloadMeta = getRealtimeTripPayloadMeta(data);
+            maybeRefreshSensor(streamDevice || selectedDevice || activeRealtimeStreamDevice, tripPayloadMeta.tripId || rtTripMeta.tripId);
             var tripLifecycle = { startedNewTrip: false, staleEvent: false, skipPointPush: false };
             if (tripPayloadMeta.tripId) {
                 tripLifecycle = applyRealtimeTripLifecycle(tripPayloadMeta, data);
@@ -767,6 +775,12 @@ function resetRealtimeSessionForDevice(device) {
             '<div class="no-data"><div class="no-data-icon">' + SVG_PIN_GREEN + '</div>Cargando posición del vehículo seleccionado...</div>';
     }
 
+    var sensorPanel = document.getElementById('sensor-panel');
+    if (sensorPanel) {
+        sensorPanel.innerHTML =
+            '<div class="no-data"><div class="no-data-icon">' + SVG_SEARCH + '</div>Esperando datos de acelerómetro</div>';
+    }
+
 }
 
 function clearRouteBridge() {
@@ -818,9 +832,61 @@ function getRtOsrmStatusLabel() {
     return 'Fallback';
 }
 
+function formatSensorValue(value) {
+    var n = parseFloat(value);
+    return isFinite(n) ? n.toFixed(3) : '--';
+}
+
+function getSensorFreshnessLabel() {
+    if (!latestSensor || !latestSensor.timestamp) return 'Sin señal';
+    var ts = parseTelemetryTimestampMs(latestSensor.timestamp);
+    if (!ts) return 'Sin señal';
+    var ageSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (ageSec <= 6) return 'Activa (' + ageSec + 's)';
+    if (ageSec <= 30) return 'Reciente (' + ageSec + 's)';
+    return 'Desfasada (' + ageSec + 's)';
+}
+
+function maybeRefreshSensor(device, tripId) {
+    if (!device) return;
+    if (sensorFetchInFlight) return;
+    if ((Date.now() - lastSensorFetchAt) < RT_SENSOR_REFRESH_MS) return;
+
+    sensorFetchInFlight = true;
+    lastSensorFetchAt = Date.now();
+
+    var url = '/api/sensor/latest?vehicle_id=' + encodeURIComponent(device);
+    if (tripId) {
+        url += '&trip_id=' + encodeURIComponent(tripId);
+    }
+
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) {
+                if (r.status === 404) return null;
+                throw new Error('sensor_http_' + r.status);
+            }
+            return r.json();
+        })
+        .then(function(payload) {
+            if (!payload || payload.error) {
+                latestSensor = null;
+                return;
+            }
+            latestSensor = payload;
+        })
+        .catch(function() {
+            // Keep previous sensor sample to avoid noisy UI flicker.
+        })
+        .finally(function() {
+            sensorFetchInFlight = false;
+        });
+}
+
 function renderRealtimePanels(data, lat, lon) {
     var livePanel = document.getElementById('live-panel');
     var routeInfo = document.getElementById('route-info');
+    var sensorPanel = document.getElementById('sensor-panel');
     var osrmStatus = getRtOsrmStatusLabel();
     var osrmCalls = rtOsrmReqTotal > 0 ? (rtOsrmReqOk + '/' + rtOsrmReqTotal) : '—';
     var methodLabel = getRealtimeRouteMethod() === 'match' ? 'Match' : 'Route';
@@ -852,6 +918,30 @@ function renderRealtimePanels(data, lat, lon) {
                 '<div class="live-field"><div class="lbl">Trip ID</div><div class="val" style="font-size:0.75rem">' + getTripShortId(rtTripMeta.tripId) + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Estado</div><div class="val">' + tripStatusLabel + '</div></div>' +
             '</div>';
+    }
+
+    if (sensorPanel) {
+        var brake = latestSensor && latestSensor.evento_frenada;
+        var turn = latestSensor && latestSensor.evento_giro;
+        var tags = '';
+        if (brake) tags += '<span class="sensor-tag sensor-tag-brake">Frenada</span>';
+        if (turn) tags += '<span class="sensor-tag sensor-tag-turn">Giro</span>';
+        if (!tags) tags = '<span class="sensor-tag">Sin eventos</span>';
+
+        sensorPanel.innerHTML =
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">Señal</div><div class="val">' + getSensorFreshnessLabel() + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Sensor source</div><div class="val">' + (latestSensor && latestSensor.sensor_source ? latestSensor.sensor_source : '—') + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">AX / AY / AZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.ax) + ' / ' + formatSensorValue(latestSensor && latestSensor.ay) + ' / ' + formatSensorValue(latestSensor && latestSensor.az) + '</div></div>' +
+                '<div class="live-field"><div class="lbl">GX / GY / GZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.gx) + ' / ' + formatSensorValue(latestSensor && latestSensor.gy) + ' / ' + formatSensorValue(latestSensor && latestSensor.gz) + '</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">Aceleración total</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.acc_mag) + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Eventos</div><div class="val">' + tags + '</div></div>' +
+            '</div>' +
+            '<div class="live-field"><div class="lbl">Timestamp sensor</div><div class="val" style="font-size:0.74rem">' + (latestSensor && latestSensor.timestamp ? latestSensor.timestamp : '—') + '</div></div>';
     }
 
     if (routeInfo) {

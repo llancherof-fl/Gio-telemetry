@@ -21,9 +21,12 @@ var histListObserver = null;
 var histQueryToken = 0;
 var histTrips = [];
 var histTripPointsCache = {};
+var histTripEventsCache = {};
 var histSelectedTripId = '';
 var histSelectedTrip = null;
 var histPreferredTripId = '';
+var histEventMarkers = [];
+var histShowEventMarkers = false;
 
 // ── Location Query state ──
 var locationQueryMode = false;
@@ -178,6 +181,7 @@ function refreshHistoricalModeLabels() {
     var sampleCustomWrap = document.getElementById('sample-custom-wrap');
     var sampleCustomInput = document.getElementById('sample-custom-minutes');
     var samplingHint = document.getElementById('hist-sample-hint');
+    var sensorPanel = document.getElementById('sensor-events-panel');
 
     if (resultsTitle) {
         resultsTitle.textContent = isTripsMode ? 'Trayectos' : 'Registros';
@@ -207,6 +211,13 @@ function refreshHistoricalModeLabels() {
         samplingHint.textContent = isTripsMode
             ? 'Paso aplicado al trayecto seleccionado (menos puntos = respuesta más rápida).'
             : 'Paso aplicado al rango completo (menos ruido y menor carga).';
+    }
+    if (sensorPanel) {
+        sensorPanel.hidden = !isTripsMode;
+    }
+    if (!isTripsMode) {
+        clearSensorEventsUi();
+        clearSensorEventMarkers();
     }
     if (typeof updateHistoricalPanelButton === 'function') {
         updateHistoricalPanelButton();
@@ -406,9 +417,12 @@ function runHistoricQuery() {
 
     histTrips = [];
     histTripPointsCache = {};
+    histTripEventsCache = {};
     histSelectedTripId = '';
     histSelectedTrip = null;
     histPreferredTripId = requestedTripId;
+    clearSensorEventMarkers();
+    clearSensorEventsUi();
 
     setHistoricStatus(
         mode === HIST_MODE_TRIPS ? 'Buscando trayectos...' : 'Buscando registros...',
@@ -472,9 +486,13 @@ function runHistoricPointsQuery(response, token) {
             '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin registros en ese período</div>';
         document.getElementById('results-count').textContent = '0';
         setHistoricStatus('Sin registros', 'var(--text-muted)');
+        clearSensorEventsUi();
+        clearSensorEventMarkers();
         return;
     }
 
+    clearSensorEventsUi();
+    clearSensorEventMarkers();
     renderHistoricResults(data);
     drawHistoricRoute(data, token);
     saveToCache(data, meta);
@@ -512,6 +530,8 @@ function runHistoricTripsQuery(response, token) {
             '<div class="no-data"><div class="no-data-icon">' + SVG_INBOX + '</div>Sin trayectos en ese período</div>';
         document.getElementById('results-count').textContent = '0';
         setHistoricStatus('Sin trayectos', 'var(--text-muted)');
+        clearSensorEventsUi();
+        clearSensorEventMarkers();
         return;
     }
 
@@ -619,6 +639,183 @@ function escapeHtml(text) {
         .replace(/'/g, '&#39;');
 }
 
+function clearSensorEventsUi() {
+    var summary = document.getElementById('sensor-events-summary');
+    var list = document.getElementById('sensor-events-list');
+    var toggleBtn = document.getElementById('btn-toggle-event-markers');
+    if (summary) summary.textContent = 'Sin trayecto seleccionado.';
+    if (list) list.innerHTML = '';
+    if (toggleBtn) {
+        toggleBtn.disabled = true;
+        toggleBtn.textContent = 'Mostrar en mapa';
+    }
+}
+
+function clearSensorEventMarkers() {
+    histEventMarkers.forEach(function(marker) {
+        if (marker && mapHist) {
+            mapHist.removeLayer(marker);
+        }
+    });
+    histEventMarkers = [];
+}
+
+function drawSensorEventMarkers(events) {
+    clearSensorEventMarkers();
+    if (!histShowEventMarkers || !events || !events.length || !mapHist) return;
+
+    events.forEach(function(evt) {
+        var lat = parseFloat(evt.lat);
+        var lon = parseFloat(evt.lon);
+        if (!isFinite(lat) || !isFinite(lon)) return;
+
+        var color = evt.evento_frenada ? '#ffb457' : '#5bb9ff';
+        var label = evt.evento_frenada && evt.evento_giro
+            ? 'Frenada + giro'
+            : (evt.evento_frenada ? 'Frenada' : 'Giro');
+
+        var marker = L.circleMarker([lat, lon], {
+            radius: 5,
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.9,
+            weight: 1.2
+        }).addTo(mapHist).bindPopup(
+            '<b>' + label + '</b><br>' + escapeHtml(evt.timestamp || '—')
+            + '<br>AX: ' + (isFinite(parseFloat(evt.ax)) ? parseFloat(evt.ax).toFixed(3) : '—')
+            + ' · GZ: ' + (isFinite(parseFloat(evt.gz)) ? parseFloat(evt.gz).toFixed(3) : '—')
+        );
+        histEventMarkers.push(marker);
+    });
+}
+
+function renderSensorEventItem(evt) {
+    var ts = evt.timestamp ? String(evt.timestamp) : '—';
+    var timeLabel = ts.length >= 16 ? ts.substring(11, 16) : ts;
+    var coordLabel = (isFinite(parseFloat(evt.lat)) && isFinite(parseFloat(evt.lon)))
+        ? (parseFloat(evt.lat).toFixed(5) + ', ' + parseFloat(evt.lon).toFixed(5))
+        : 'Sin coordenadas';
+    var tags = '';
+    if (evt.evento_frenada) tags += '<span class="sensor-tag sensor-tag-brake">Frenada</span>';
+    if (evt.evento_giro) tags += '<span class="sensor-tag sensor-tag-turn">Giro</span>';
+    if (!tags) tags = '<span class="sensor-tag">Evento</span>';
+    return '<div class="sensor-event-item">' +
+        '<div class="sensor-event-main">' +
+        '<div class="sensor-event-tags">' + tags + '</div>' +
+        '<div class="sensor-event-time">' + escapeHtml(timeLabel) + '</div>' +
+        '</div>' +
+        '<div class="sensor-event-coords">' + escapeHtml(coordLabel) + '</div>' +
+        '</div>';
+}
+
+function renderSensorEvents(trip, events) {
+    var summary = document.getElementById('sensor-events-summary');
+    var list = document.getElementById('sensor-events-list');
+    var toggleBtn = document.getElementById('btn-toggle-event-markers');
+    if (!summary || !list || !toggleBtn) return;
+
+    var braking = 0;
+    var turning = 0;
+    var withCoords = 0;
+    events.forEach(function(evt) {
+        if (evt.evento_frenada) braking += 1;
+        if (evt.evento_giro) turning += 1;
+        if (isFinite(parseFloat(evt.lat)) && isFinite(parseFloat(evt.lon))) withCoords += 1;
+    });
+
+    summary.textContent = events.length + ' eventos · frenadas ' + braking + ' · giros ' + turning + ' · con coordenadas ' + withCoords;
+
+    toggleBtn.disabled = withCoords === 0;
+    toggleBtn.textContent = histShowEventMarkers ? 'Ocultar en mapa' : 'Mostrar en mapa';
+
+    if (!events.length) {
+        list.innerHTML = '<div class="no-data" style="padding:10px 8px">Sin eventos detectados en este trayecto.</div>';
+        clearSensorEventMarkers();
+        return;
+    }
+
+    var pageSize = 40;
+    var offset = 0;
+
+    function appendPage() {
+        var chunk = events.slice(offset, offset + pageSize);
+        if (!chunk.length) return;
+        list.insertAdjacentHTML('beforeend', chunk.map(renderSensorEventItem).join(''));
+        offset += chunk.length;
+        var moreBtn = document.getElementById('sensor-events-more-btn');
+        if (moreBtn) {
+            moreBtn.style.display = offset < events.length ? 'block' : 'none';
+        }
+    }
+
+    list.innerHTML = '';
+    appendPage();
+
+    if (events.length > pageSize) {
+        list.insertAdjacentHTML(
+            'beforeend',
+            '<button class="btn btn-outline btn-sm" id="sensor-events-more-btn">Cargar más</button>',
+        );
+        var moreButton = document.getElementById('sensor-events-more-btn');
+        if (moreButton) {
+            moreButton.addEventListener('click', function() {
+                appendPage();
+            });
+        }
+    }
+
+    drawSensorEventMarkers(events);
+}
+
+function loadTripSensorEvents(trip) {
+    if (!trip || !trip.trip_id) {
+        clearSensorEventsUi();
+        clearSensorEventMarkers();
+        return;
+    }
+    var cacheKey = String(trip.trip_id);
+    if (histTripEventsCache[cacheKey]) {
+        renderSensorEvents(trip, histTripEventsCache[cacheKey]);
+        return;
+    }
+
+    var params = [
+        'trip_id=' + encodeURIComponent(trip.trip_id),
+        'start=' + encodeURIComponent(currentRange.start || ''),
+        'end=' + encodeURIComponent(currentRange.end || ''),
+        'limit=400'
+    ];
+    var summary = document.getElementById('sensor-events-summary');
+    if (summary) summary.textContent = 'Cargando eventos del trayecto...';
+
+    fetch('/api/sensor/events?' + params.join('&'))
+        .then(function(r) {
+            if (!r.ok) throw new Error('sensor_events_http_' + r.status);
+            return r.json();
+        })
+        .then(function(payload) {
+            var events = (payload && payload.events) ? payload.events : [];
+            histTripEventsCache[cacheKey] = events;
+            if (histSelectedTripId === trip.trip_id) {
+                renderSensorEvents(trip, events);
+            }
+        })
+        .catch(function() {
+            if (summary) summary.textContent = 'No se pudo cargar eventos de sensor.';
+        });
+}
+
+function toggleSensorEventMarkers() {
+    histShowEventMarkers = !histShowEventMarkers;
+    var trip = histSelectedTrip;
+    if (!trip || !trip.trip_id) {
+        histShowEventMarkers = false;
+        return;
+    }
+    var events = histTripEventsCache[String(trip.trip_id)] || [];
+    renderSensorEvents(trip, events);
+}
+
 function renderTripResults(trips) {
     if (histListObserver) {
         histListObserver.disconnect();
@@ -704,6 +901,7 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
         if (fromUserClick) {
             showToast('Trayecto cargado desde caché local de la sesión actual');
         }
+        loadTripSensorEvents(histSelectedTrip);
         return;
     }
 
@@ -761,11 +959,14 @@ function selectHistoricTrip(tripId, token, fromUserClick) {
             }
             summary += ' · precisión ' + getSampleLabel();
             setHistoricStatus(summary + ' · método ' + (getHistoricRouteMethod() === 'match' ? 'Match' : 'Route'), 'var(--green)');
+            loadTripSensorEvents(histSelectedTrip || getTripById(tripId));
         })
         .catch(function (err) {
             if (err && err.name === 'AbortError') return;
             setHistoricStatus('Error cargando trayecto', 'var(--red)');
             showToast(err && err.message ? err.message : 'No se pudo cargar el trayecto seleccionado');
+            clearSensorEventsUi();
+            clearSensorEventMarkers();
         })
         .finally(function () {
             histTripPointsController = null;
@@ -850,6 +1051,7 @@ function clearHistoricLayers() {
 
     clearGpsDots();
     clearLocationQueryMarker();
+    clearSensorEventMarkers();
     locationQueryData = null;
 
     historicRouteBounds = null;
@@ -1204,8 +1406,12 @@ function clearHistoric(silent) {
     clearHistoricLayers();
     histTrips = [];
     histTripPointsCache = {};
+    histTripEventsCache = {};
     histSelectedTripId = '';
     histSelectedTrip = null;
+    histShowEventMarkers = false;
+    clearSensorEventsUi();
+    clearSensorEventMarkers();
 
     if (histListObserver) {
         histListObserver.disconnect();

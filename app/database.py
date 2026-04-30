@@ -3,6 +3,7 @@ GIO Telemetry — Database Layer
 Connection pool, schema initialization, and all CRUD operations.
 """
 import datetime
+import math
 
 import psycopg2
 import psycopg2.extras
@@ -60,13 +61,37 @@ def init_db():
                 gx DECIMAL(10, 6),
                 gy DECIMAL(10, 6),
                 gz DECIMAL(10, 6),
+                lat DOUBLE PRECISION,
+                lon DOUBLE PRECISION,
+                acc_mag DECIMAL(10, 6),
+                trip_id VARCHAR(96),
+                event_id VARCHAR(96),
+                seq INTEGER,
+                client_ts_ms BIGINT,
+                sensor_source VARCHAR(24),
                 evento_frenada BOOLEAN DEFAULT FALSE,
                 evento_giro BOOLEAN DEFAULT FALSE
             )
         ''')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS acc_mag DECIMAL(10, 6)')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS trip_id VARCHAR(96)')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS event_id VARCHAR(96)')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS seq INTEGER')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS client_ts_ms BIGINT')
+        c.execute('ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS sensor_source VARCHAR(24)')
         c.execute('''
             CREATE INDEX IF NOT EXISTS idx_sensor_vehicle_time
             ON sensor_data(vehicle_id, timestamp)
+        ''')
+        c.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sensor_trip_time
+            ON sensor_data(trip_id, timestamp)
+        ''')
+        c.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sensor_event_flags_time
+            ON sensor_data(evento_frenada, evento_giro, timestamp)
         ''')
 
         conn.commit()
@@ -520,20 +545,131 @@ def fetch_stats():
 
 
 # ══════════════════════════════════════════
-#  SENSOR DATA OPERATIONS (P3-S1: MPU6050)
+#  SENSOR DATA OPERATIONS (P3-S2: BLE + MPU6050)
 # ══════════════════════════════════════════
 
-def insert_sensor_data(vehicle_id, ax, ay, az, gx, gy, gz, evento_frenada, evento_giro):
-    """Insert a new sensor reading and return the generated timestamp."""
+def _to_float_or_none(value):
+    try:
+        if value is None:
+            return None
+        out = float(value)
+        if math.isfinite(out):
+            return out
+        return None
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_int_or_none(value):
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_bool(value, default=False):
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    safe = str(value).strip().lower()
+    if safe in ('true', '1', 'yes', 'y', 'on'):
+        return True
+    if safe in ('false', '0', 'no', 'n', 'off'):
+        return False
+    return bool(default)
+
+
+def _normalize_sensor_record(row):
+    row = dict(row)
+    row['timestamp'] = str(row['timestamp']) if row.get('timestamp') else None
+    for key in ('ax', 'ay', 'az', 'gx', 'gy', 'gz', 'lat', 'lon', 'acc_mag'):
+        if row.get(key) is not None:
+            row[key] = float(row[key])
+    return row
+
+
+def _build_sensor_where(vehicle_id=None, trip_id=None, start=None, end=None, events_only=False):
+    clauses = []
+    params = []
+    if events_only:
+        clauses.append('(evento_frenada = TRUE OR evento_giro = TRUE)')
+    if vehicle_id:
+        clauses.append('vehicle_id = %s')
+        params.append(vehicle_id)
+    if trip_id:
+        clauses.append('trip_id = %s')
+        params.append(trip_id)
+    if start:
+        clauses.append('timestamp >= %s')
+        params.append(start)
+    if end:
+        clauses.append('timestamp <= %s')
+        params.append(end)
+    where_sql = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
+    return where_sql, params
+
+
+def insert_sensor_data(
+    vehicle_id,
+    ax,
+    ay,
+    az,
+    gx,
+    gy,
+    gz,
+    evento_frenada,
+    evento_giro,
+    lat=None,
+    lon=None,
+    acc_mag=None,
+    trip_id=None,
+    event_id=None,
+    seq=None,
+    client_ts_ms=None,
+    sensor_source='ble',
+    timestamp=None,
+):
+    """Insert a single sensor reading and return the generated timestamp."""
+    sensor_ts = timestamp
+    if not sensor_ts:
+        sensor_ts = _to_colombia_time(client_ts_ms) if client_ts_ms else (datetime.datetime.utcnow() - datetime.timedelta(hours=5))
+
     conn = get_conn()
     try:
         c = conn.cursor()
         c.execute(
-            '''INSERT INTO sensor_data
-                   (vehicle_id, ax, ay, az, gx, gy, gz, evento_frenada, evento_giro)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            '''INSERT INTO sensor_data (
+                   vehicle_id, timestamp, ax, ay, az, gx, gy, gz,
+                   lat, lon, acc_mag, trip_id, event_id, seq, client_ts_ms, sensor_source,
+                   evento_frenada, evento_giro
+               )
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING timestamp''',
-            (vehicle_id, ax, ay, az, gx, gy, gz, evento_frenada, evento_giro),
+            (
+                (vehicle_id or 'unknown')[:50],
+                sensor_ts,
+                _to_float_or_none(ax),
+                _to_float_or_none(ay),
+                _to_float_or_none(az),
+                _to_float_or_none(gx),
+                _to_float_or_none(gy),
+                _to_float_or_none(gz),
+                _to_float_or_none(lat),
+                _to_float_or_none(lon),
+                _to_float_or_none(acc_mag),
+                (str(trip_id).strip()[:96] if trip_id else None),
+                (str(event_id).strip()[:96] if event_id else None),
+                _to_int_or_none(seq),
+                _to_int_or_none(client_ts_ms),
+                (str(sensor_source).strip()[:24] if sensor_source else None),
+                _to_bool(evento_frenada),
+                _to_bool(evento_giro),
+            ),
         )
         result = c.fetchone()
         conn.commit()
@@ -542,75 +678,147 @@ def insert_sensor_data(vehicle_id, ax, ay, az, gx, gy, gz, evento_frenada, event
         release_conn(conn)
 
 
-def fetch_sensor_latest(vehicle_id=None):
-    """Fetch the most recent sensor reading, optionally filtered by vehicle_id."""
+def insert_sensor_batch(rows):
+    """Insert many sensor rows in one transaction. Returns inserted count."""
+    if not rows:
+        return 0
+
+    brake_thr = max(0.0, float(Config.SENSOR_BRAKE_AX_G))
+    turn_thr = max(0.0, float(Config.SENSOR_TURN_GZ_DPS))
+    values = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        ax = _to_float_or_none(row.get('ax'))
+        ay = _to_float_or_none(row.get('ay'))
+        az = _to_float_or_none(row.get('az'))
+        gx = _to_float_or_none(row.get('gx'))
+        gy = _to_float_or_none(row.get('gy'))
+        gz = _to_float_or_none(row.get('gz'))
+        if ax is None or ay is None or az is None:
+            continue
+        if gx is None:
+            gx = 0.0
+        if gy is None:
+            gy = 0.0
+        if gz is None:
+            gz = 0.0
+
+        raw_sensor_ts = _to_int_or_none(row.get('sensor_ts_ms'))
+        raw_client_ts = _to_int_or_none(row.get('client_ts_ms'))
+        sensor_ts = raw_sensor_ts or raw_client_ts
+        timestamp = _to_colombia_time(sensor_ts) if sensor_ts else (datetime.datetime.utcnow() - datetime.timedelta(hours=5))
+
+        lat = _to_float_or_none(row.get('lat'))
+        lon = _to_float_or_none(row.get('lon'))
+        acc_mag = _to_float_or_none(row.get('acc_mag'))
+        if acc_mag is None:
+            acc_mag = math.sqrt((ax * ax) + (ay * ay) + (az * az))
+
+        evento_frenada = _to_bool(row.get('evento_frenada'), default=(abs(ax) >= brake_thr))
+        evento_giro = _to_bool(row.get('evento_giro'), default=(abs(gz) >= turn_thr))
+
+        values.append((
+            (str(row.get('device') or row.get('vehicle_id') or 'unknown').strip()[:50]),
+            timestamp,
+            ax,
+            ay,
+            az,
+            gx,
+            gy,
+            gz,
+            lat,
+            lon,
+            acc_mag,
+            (str(row.get('trip_id')).strip()[:96] if row.get('trip_id') else None),
+            (str(row.get('event_id')).strip()[:96] if row.get('event_id') else None),
+            _to_int_or_none(row.get('seq')),
+            raw_client_ts,
+            (str(row.get('sensor_source')).strip()[:24] if row.get('sensor_source') else 'ble'),
+            evento_frenada,
+            evento_giro,
+        ))
+
+    if not values:
+        return 0
+
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        psycopg2.extras.execute_values(
+            c,
+            '''INSERT INTO sensor_data (
+                   vehicle_id, timestamp, ax, ay, az, gx, gy, gz,
+                   lat, lon, acc_mag, trip_id, event_id, seq, client_ts_ms, sensor_source,
+                   evento_frenada, evento_giro
+               ) VALUES %s''',
+            values,
+            template='(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            page_size=500,
+        )
+        conn.commit()
+        return len(values)
+    finally:
+        release_conn(conn)
+
+
+def fetch_sensor_latest(vehicle_id=None, trip_id=None):
+    """Fetch the latest sensor reading, optionally filtered by vehicle and/or trip."""
     conn = get_conn()
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        if vehicle_id:
-            c.execute(
-                'SELECT * FROM sensor_data WHERE vehicle_id = %s ORDER BY id DESC LIMIT 1',
-                (vehicle_id,),
-            )
-        else:
-            c.execute('SELECT * FROM sensor_data ORDER BY id DESC LIMIT 1')
+        where_sql, params = _build_sensor_where(vehicle_id=vehicle_id, trip_id=trip_id)
+        c.execute(f'SELECT * FROM sensor_data{where_sql} ORDER BY id DESC LIMIT 1', tuple(params))
         row = c.fetchone()
-        if row:
-            row = dict(row)
-            row['timestamp'] = str(row['timestamp'])
-            for key in ('ax', 'ay', 'az', 'gx', 'gy', 'gz'):
-                if row.get(key) is not None:
-                    row[key] = float(row[key])
-        return row
+        return _normalize_sensor_record(row) if row else None
     finally:
         release_conn(conn)
 
 
-def fetch_sensor_history(vehicle_id=None, limit=100):
-    """Fetch sensor history with configurable limit, optionally filtered by vehicle_id."""
-    limit = min(limit, 500)
+def fetch_sensor_history(vehicle_id=None, trip_id=None, start=None, end=None, limit=100):
+    """Fetch sensor history with optional filters."""
+    limit = min(max(int(limit or 100), 1), 1000)
     conn = get_conn()
     try:
         c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        if vehicle_id:
-            c.execute(
-                'SELECT * FROM sensor_data WHERE vehicle_id = %s ORDER BY id DESC LIMIT %s',
-                (vehicle_id, limit),
-            )
-        else:
-            c.execute('SELECT * FROM sensor_data ORDER BY id DESC LIMIT %s', (limit,))
-        rows = [dict(r) for r in c.fetchall()]
-        for r in rows:
-            r['timestamp'] = str(r['timestamp'])
-            for key in ('ax', 'ay', 'az', 'gx', 'gy', 'gz'):
-                if r.get(key) is not None:
-                    r[key] = float(r[key])
-        return rows
-    finally:
-        release_conn(conn)
-
-
-def fetch_sensor_events(vehicle_id=None, limit=50):
-    """Fetch only sensor records where an event (frenada or giro) was detected."""
-    limit = min(limit, 200)
-    conn = get_conn()
-    try:
-        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        query = 'SELECT * FROM sensor_data WHERE (evento_frenada = TRUE OR evento_giro = TRUE)'
-        params = []
-        if vehicle_id:
-            query += ' AND vehicle_id = %s'
-            params.append(vehicle_id)
-        query += ' ORDER BY id DESC LIMIT %s'
+        where_sql, params = _build_sensor_where(vehicle_id=vehicle_id, trip_id=trip_id, start=start, end=end)
         params.append(limit)
-        c.execute(query, tuple(params))
-        rows = [dict(r) for r in c.fetchall()]
-        for r in rows:
-            r['timestamp'] = str(r['timestamp'])
-            for key in ('ax', 'ay', 'az', 'gx', 'gy', 'gz'):
-                if r.get(key) is not None:
-                    r[key] = float(r[key])
-        return rows
+        c.execute(
+            f'''SELECT * FROM sensor_data
+                {where_sql}
+                ORDER BY id DESC
+                LIMIT %s''',
+            tuple(params),
+        )
+        return [_normalize_sensor_record(r) for r in c.fetchall()]
+    finally:
+        release_conn(conn)
+
+
+def fetch_sensor_events(vehicle_id=None, trip_id=None, start=None, end=None, limit=50):
+    """Fetch event rows (frenada/giro) with optional filters."""
+    limit = min(max(int(limit or 50), 1), 1000)
+    conn = get_conn()
+    try:
+        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        where_sql, params = _build_sensor_where(
+            vehicle_id=vehicle_id,
+            trip_id=trip_id,
+            start=start,
+            end=end,
+            events_only=True,
+        )
+        params.append(limit)
+        c.execute(
+            f'''SELECT * FROM sensor_data
+                {where_sql}
+                ORDER BY id DESC
+                LIMIT %s''',
+            tuple(params),
+        )
+        return [_normalize_sensor_record(r) for r in c.fetchall()]
     finally:
         release_conn(conn)
 

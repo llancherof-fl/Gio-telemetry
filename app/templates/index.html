@@ -109,6 +109,21 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" style="display:flex;flex-direction:column;">
+                <div class="card-header">
+                    <span class="badge badge-blue">SENSOR</span>
+                    Telemetría MPU6050
+                </div>
+                <div class="live-panel" id="sensor-panel">
+                    <div class="no-data">
+                        <div class="no-data-icon">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                        </div>
+                        Esperando datos de acelerómetro
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -246,6 +261,14 @@
                     Selecciona un rango y presiona Buscar
                 </div>
             </div>
+            <div class="sensor-events-panel" id="sensor-events-panel">
+                <div class="sensor-events-header">
+                    <span class="results-title">Eventos sensor</span>
+                    <button class="btn btn-outline btn-sm" id="btn-toggle-event-markers" onclick="toggleSensorEventMarkers()" disabled>Mostrar en mapa</button>
+                </div>
+                <div class="sensor-events-summary" id="sensor-events-summary">Sin trayecto seleccionado.</div>
+                <div class="sensor-events-list" id="sensor-events-list"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -304,6 +327,7 @@
                 <h4>Cómo probar rápido</h4>
                 <ul>
                     <li>En <b>Tiempo real</b>, valida que cambien timestamp y coordenadas.</li>
+                    <li>Si hay ESP32 enlazado, el panel <b>Sensor</b> mostrará AX/AY/AZ y GX/GY/GZ en vivo.</li>
                     <li>Usa <b>Recentrar</b> si moviste el mapa manualmente.</li>
                     <li>En <b>Histórico</b>, ajusta modo de visualización, rango y paso según el detalle que necesites.</li>
                 </ul>
@@ -314,6 +338,7 @@
                 <ul>
                     <li>Usa el selector <b>Trayectos/Puntos</b> para alternar entre sesiones reales o lista cruda.</li>
                     <li>En modo <b>Trayectos</b>, selecciona una sesión para pintar su ruta exacta.</li>
+                    <li>Abajo del panel derecho se resume la cantidad de <b>frenadas y giros</b> detectados.</li>
                     <li>Pin verde: inicio de sesión. Pin rojo: fin de sesión.</li>
                     <li>Si cambias filtros, presiona <b>Buscar</b> para recalcular.</li>
                     <li><b>Reencuadrar ruta</b> centra de nuevo el recorrido completo.</li>
