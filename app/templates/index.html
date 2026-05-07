@@ -565,12 +565,12 @@ function updateSensor3D(ax, ay, az, gx, gy, gz) {
     var roll = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
 
     // Smooth interpolation to avoid jitter
-    var SMOOTH = 0.12;
+    var SMOOTH = 0.4;
     carModel3d.rotation.x += (pitch - carModel3d.rotation.x) * SMOOTH;
     carModel3d.rotation.z += (roll - carModel3d.rotation.z) * SMOOTH;
 
     // Yaw from gyroscope Z (integrated, with decay to prevent drift)
-    carModel3d.rotation.y += (gz * 0.00008);
+    carModel3d.rotation.y += (gz * 0.0002);
     carModel3d.rotation.y *= 0.995; // slow decay to center
 }
 
