@@ -883,6 +883,56 @@ function maybeRefreshSensor(device, tripId) {
         });
 }
 
+function renderRealtimeSensorPanelShell(sensorPanel) {
+    if (!sensorPanel) return;
+    var existingShell = sensorPanel.querySelector('[data-sensor-shell="v2"]');
+    if (existingShell) return;
+    sensorPanel.innerHTML =
+        '<div data-sensor-shell="v2">' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">AX / AY / AZ</div><div class="val" id="rt-sensor-ax">-- / -- / --</div></div>' +
+                '<div class="live-field"><div class="lbl">GX / GY / GZ</div><div class="val" id="rt-sensor-gx">-- / -- / --</div></div>' +
+            '</div>' +
+            '<div class="live-grid">' +
+                '<div class="live-field"><div class="lbl">Eventos</div><div class="val" id="rt-sensor-events"><span class="sensor-tag">Sin eventos</span></div></div>' +
+                '<div class="live-field"><div class="lbl">Source</div><div class="val" id="rt-sensor-source">—</div></div>' +
+            '</div>' +
+            '<div id="sensor-3d-wrap" style="width:100%;height:160px;margin-top:8px;border-radius:8px;overflow:hidden;background:#0a0e1a"></div>' +
+            '<div class="live-field" style="margin-top:6px"><div class="lbl">Timestamp sensor</div><div class="val" style="font-size:0.74rem" id="rt-sensor-ts">—</div></div>' +
+        '</div>';
+    if (typeof resetSensor3DContainer === 'function') {
+        resetSensor3DContainer();
+    }
+}
+
+function updateRealtimeSensorPanelValues() {
+    var brake = latestSensor && latestSensor.evento_frenada;
+    var turn = latestSensor && latestSensor.evento_giro;
+    var tags = '';
+    if (brake) tags += '<span class="sensor-tag sensor-tag-brake">Frenada</span>';
+    if (turn) tags += '<span class="sensor-tag sensor-tag-turn">Giro</span>';
+    if (!tags) tags = '<span class="sensor-tag">Sin eventos</span>';
+
+    var axText = formatSensorValue(latestSensor && latestSensor.ax) + ' / '
+        + formatSensorValue(latestSensor && latestSensor.ay) + ' / '
+        + formatSensorValue(latestSensor && latestSensor.az);
+    var gxText = formatSensorValue(latestSensor && latestSensor.gx) + ' / '
+        + formatSensorValue(latestSensor && latestSensor.gy) + ' / '
+        + formatSensorValue(latestSensor && latestSensor.gz);
+
+    var axEl = document.getElementById('rt-sensor-ax');
+    var gxEl = document.getElementById('rt-sensor-gx');
+    var eventsEl = document.getElementById('rt-sensor-events');
+    var sourceEl = document.getElementById('rt-sensor-source');
+    var tsEl = document.getElementById('rt-sensor-ts');
+
+    if (axEl) axEl.textContent = axText;
+    if (gxEl) gxEl.textContent = gxText;
+    if (eventsEl) eventsEl.innerHTML = tags;
+    if (sourceEl) sourceEl.textContent = latestSensor && latestSensor.sensor_source ? latestSensor.sensor_source : '—';
+    if (tsEl) tsEl.textContent = latestSensor && latestSensor.timestamp ? latestSensor.timestamp : '—';
+}
+
 function renderRealtimePanels(data, lat, lon) {
     var livePanel = document.getElementById('live-panel');
     var routeInfo = document.getElementById('route-info');
@@ -921,25 +971,8 @@ function renderRealtimePanels(data, lat, lon) {
     }
 
     if (sensorPanel) {
-        var brake = latestSensor && latestSensor.evento_frenada;
-        var turn = latestSensor && latestSensor.evento_giro;
-        var tags = '';
-        if (brake) tags += '<span class="sensor-tag sensor-tag-brake">Frenada</span>';
-        if (turn) tags += '<span class="sensor-tag sensor-tag-turn">Giro</span>';
-        if (!tags) tags = '<span class="sensor-tag">Sin eventos</span>';
-
-        sensorPanel.innerHTML =
-            '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">AX / AY / AZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.ax) + ' / ' + formatSensorValue(latestSensor && latestSensor.ay) + ' / ' + formatSensorValue(latestSensor && latestSensor.az) + '</div></div>' +
-                '<div class="live-field"><div class="lbl">GX / GY / GZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.gx) + ' / ' + formatSensorValue(latestSensor && latestSensor.gy) + ' / ' + formatSensorValue(latestSensor && latestSensor.gz) + '</div></div>' +
-            '</div>' +
-            '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Eventos</div><div class="val">' + tags + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Source</div><div class="val">' + (latestSensor && latestSensor.sensor_source ? latestSensor.sensor_source : '—') + '</div></div>' +
-            '</div>' +
-            '<div id="sensor-3d-wrap" style="width:100%;height:160px;margin-top:8px;border-radius:8px;overflow:hidden;background:#0a0e1a"></div>' +
-            '<div class="live-field" style="margin-top:6px"><div class="lbl">Timestamp sensor</div><div class="val" style="font-size:0.74rem">' + (latestSensor && latestSensor.timestamp ? latestSensor.timestamp : '—') + '</div></div>';
-
+        renderRealtimeSensorPanelShell(sensorPanel);
+        updateRealtimeSensorPanelValues();
         initSensor3D();
         if (latestSensor) {
             updateSensor3D(

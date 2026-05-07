@@ -28,6 +28,7 @@ var histSelectedTrip = null;
 var histPreferredTripId = '';
 var histEventMarkers = [];
 var histShowEventMarkers = false;
+var histEventAutoScopeKey = '';
 
 // ── Location Query state ──
 var locationQueryMode = false;
@@ -379,12 +380,47 @@ function fitHistoricRoute() {
     fitHistoricBounds(historicRouteBounds, true);
 }
 
-function refreshHistoricLayout(skipAnimation) {
+function parseHistoricLayoutOptions(options) {
+    var defaults = {
+        skipAnimation: true,
+        refit: false,
+        preserveView: true
+    };
+    if (typeof options === 'boolean') {
+        defaults.skipAnimation = options;
+        return defaults;
+    }
+    if (!options || typeof options !== 'object') {
+        return defaults;
+    }
+    if (typeof options.skipAnimation === 'boolean') {
+        defaults.skipAnimation = options.skipAnimation;
+    }
+    if (typeof options.refit === 'boolean') {
+        defaults.refit = options.refit;
+    }
+    if (typeof options.preserveView === 'boolean') {
+        defaults.preserveView = options.preserveView;
+    }
+    return defaults;
+}
+
+function refreshHistoricLayout(options) {
+    var layoutOptions = parseHistoricLayoutOptions(options);
     if (!mapHist) return;
+    var currentCenter = null;
+    var currentZoom = null;
+    if (layoutOptions.preserveView) {
+        currentCenter = mapHist.getCenter();
+        currentZoom = mapHist.getZoom();
+    }
     mapHist.invalidateSize();
-    if (!historicRouteBounds) return;
+    if (layoutOptions.preserveView && currentCenter && isFinite(currentZoom)) {
+        mapHist.setView(currentCenter, currentZoom, { animate: false });
+    }
+    if (!layoutOptions.refit || !historicRouteBounds) return;
     setTimeout(function () {
-        fitHistoricBounds(historicRouteBounds, !skipAnimation);
+        fitHistoricBounds(historicRouteBounds, !layoutOptions.skipAnimation);
     }, 40);
 }
 
@@ -657,6 +693,7 @@ function clearSensorEventsUi() {
     var toggleBtn = document.getElementById('btn-toggle-event-markers');
     var isTripsMode = getHistoricalDataMode() === HIST_MODE_TRIPS;
     histRangeSensorEvents = [];
+    histEventAutoScopeKey = '';
     if (summary) summary.textContent = isTripsMode ? 'Sin trayecto seleccionado.' : 'Sin consulta activa para este rango.';
     if (list) list.innerHTML = '';
     if (toggleBtn) {
@@ -683,21 +720,24 @@ function drawSensorEventMarkers(events) {
         var lon = parseFloat(evt.lon);
         if (!isFinite(lat) || !isFinite(lon)) return;
 
-        var color = evt.evento_frenada ? '#ffb457' : '#5bb9ff';
+        var color = evt.evento_frenada && evt.evento_giro
+            ? '#c084fc'
+            : (evt.evento_frenada ? '#ffb457' : '#5bb9ff');
         var label = evt.evento_frenada && evt.evento_giro
             ? 'Frenada + giro'
             : (evt.evento_frenada ? 'Frenada' : 'Giro');
 
         var marker = L.circleMarker([lat, lon], {
-            radius: 5,
-            color: color,
+            radius: 6.5,
+            color: '#0b1221',
             fillColor: color,
-            fillOpacity: 0.9,
-            weight: 1.2
+            fillOpacity: 0.96,
+            weight: 2
         }).addTo(mapHist).bindPopup(
             '<b>' + label + '</b><br>' + escapeHtml(evt.timestamp || '—')
             + '<br>AX: ' + (isFinite(parseFloat(evt.ax)) ? parseFloat(evt.ax).toFixed(3) : '—')
-            + ' · GZ: ' + (isFinite(parseFloat(evt.gz)) ? parseFloat(evt.gz).toFixed(3) : '—')
+            + ' · AY: ' + (isFinite(parseFloat(evt.ay)) ? parseFloat(evt.ay).toFixed(3) : '—')
+            + '<br>GZ: ' + (isFinite(parseFloat(evt.gz)) ? parseFloat(evt.gz).toFixed(3) : '—')
         );
         histEventMarkers.push(marker);
     });
@@ -722,6 +762,16 @@ function renderSensorEventItem(evt) {
         '</div>';
 }
 
+function getSensorEventsScopeKey(trip) {
+    if (trip && trip.trip_id) {
+        return 'trip:' + String(trip.trip_id);
+    }
+    if (currentRange && currentRange.start && currentRange.end) {
+        return 'range:' + String(currentRange.start) + '|' + String(currentRange.end);
+    }
+    return 'none';
+}
+
 function renderSensorEvents(trip, events) {
     var summary = document.getElementById('sensor-events-summary');
     var list = document.getElementById('sensor-events-list');
@@ -744,8 +794,10 @@ function renderSensorEvents(trip, events) {
     summary.textContent = events.length + ' eventos · frenadas ' + braking + ' · giros ' + turning + ' · con coordenadas ' + withCoords;
 
     toggleBtn.disabled = withCoords === 0;
-    if (!histShowEventMarkers && withCoords > 0) {
+    var scopeKey = getSensorEventsScopeKey(trip);
+    if (!histShowEventMarkers && withCoords > 0 && histEventAutoScopeKey !== scopeKey) {
         histShowEventMarkers = true;
+        histEventAutoScopeKey = scopeKey;
     }
     toggleBtn.textContent = histShowEventMarkers ? 'Ocultar en mapa' : 'Mostrar en mapa';
 
@@ -863,12 +915,13 @@ function loadRangeSensorEvents() {
 function toggleSensorEventMarkers() {
     histShowEventMarkers = !histShowEventMarkers;
     var mode = getHistoricalDataMode();
+    var trip = mode === HIST_MODE_POINTS ? null : histSelectedTrip;
+    histEventAutoScopeKey = getSensorEventsScopeKey(trip);
     if (mode === HIST_MODE_POINTS) {
         renderSensorEvents(null, histRangeSensorEvents || []);
         return;
     }
 
-    var trip = histSelectedTrip;
     if (!trip || !trip.trip_id) {
         histShowEventMarkers = false;
         clearSensorEventMarkers();
