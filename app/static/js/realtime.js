@@ -45,7 +45,7 @@ var RT_FETCH_TIMEOUT_MS = 6000;
 var RT_TELEPORT_MAX_SPEED_KMH = 260;
 var RT_TELEPORT_HARD_JUMP_KM = 120;
 var RT_TELEPORT_TOAST_COOLDOWN_MS = 15000;
-var RT_SENSOR_REFRESH_MS = 800;
+var RT_SENSOR_REFRESH_MS = 200;
 var RT_EVENT_START = 'trip_start';
 var RT_EVENT_POSITION = 'position';
 var RT_EVENT_END = 'trip_end';
@@ -72,7 +72,7 @@ var rtOsrm = {
 };
 
 // ── Polling control ──
-var pollInterval = 800;
+var pollInterval = 200;
 var pollTimer = null;
 var backoffMultiplier = 1;
 var MAX_BACKOFF = 16;
