@@ -744,6 +744,9 @@ function renderSensorEvents(trip, events) {
     summary.textContent = events.length + ' eventos · frenadas ' + braking + ' · giros ' + turning + ' · con coordenadas ' + withCoords;
 
     toggleBtn.disabled = withCoords === 0;
+    if (!histShowEventMarkers && withCoords > 0) {
+        histShowEventMarkers = true;
+    }
     toggleBtn.textContent = histShowEventMarkers ? 'Ocultar en mapa' : 'Mostrar en mapa';
 
     if (!events.length) {

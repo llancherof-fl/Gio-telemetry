@@ -383,6 +383,125 @@
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/spline.js') }}"></script>
 <script src="{{ url_for('static', filename='js/maps.js') }}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ════════════════════════════════════════
+// SENSOR 3D VISUALIZATION
+// ════════════════════════════════════════
+var scene3d = null, camera3d = null, renderer3d = null, carModel3d = null;
+var sensor3dInitialized = false;
+
+function initSensor3D() {
+    var container = document.getElementById('sensor-3d-wrap');
+    if (!container || sensor3dInitialized) return;
+    if (container.offsetWidth < 10) return;
+
+    sensor3dInitialized = true;
+
+    scene3d = new THREE.Scene();
+    camera3d = new THREE.PerspectiveCamera(50, container.offsetWidth / 160, 0.1, 1000);
+    camera3d.position.set(3, 2.2, 3);
+    camera3d.lookAt(0, 0, 0);
+
+    renderer3d = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer3d.setSize(container.offsetWidth, 160);
+    renderer3d.setClearColor(0x0a0e1a, 1);
+    container.innerHTML = '';
+    container.appendChild(renderer3d.domElement);
+
+    // Lights
+    scene3d.add(new THREE.AmbientLight(0x404060, 0.6));
+    var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 5, 5);
+    scene3d.add(dirLight);
+    var backLight = new THREE.DirectionalLight(0x4dabf7, 0.3);
+    backLight.position.set(-3, 2, -3);
+    scene3d.add(backLight);
+
+    // Car body
+    var bodyGeo = new THREE.BoxGeometry(2.2, 0.45, 1.1);
+    var bodyMat = new THREE.MeshPhongMaterial({ color: 0x339af0, shininess: 60 });
+    var body = new THREE.Mesh(bodyGeo, bodyMat);
+
+    // Cabin
+    var cabinGeo = new THREE.BoxGeometry(1.1, 0.38, 0.9);
+    var cabinMat = new THREE.MeshPhongMaterial({ color: 0x4dabf7, shininess: 80, transparent: true, opacity: 0.85 });
+    var cabin = new THREE.Mesh(cabinGeo, cabinMat);
+    cabin.position.set(-0.15, 0.41, 0);
+
+    // Windshield
+    var windGeo = new THREE.BoxGeometry(0.05, 0.3, 0.7);
+    var windMat = new THREE.MeshPhongMaterial({ color: 0x74c0fc, transparent: true, opacity: 0.5 });
+    var windshield = new THREE.Mesh(windGeo, windMat);
+    windshield.position.set(0.4, 0.38, 0);
+
+    // Wheels
+    var wheelGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 12);
+    var wheelMat = new THREE.MeshPhongMaterial({ color: 0x1e2a4a });
+    var wheelPositions = [
+        [0.7, -0.2, 0.55], [0.7, -0.2, -0.55],
+        [-0.7, -0.2, 0.55], [-0.7, -0.2, -0.55]
+    ];
+
+    carModel3d = new THREE.Group();
+    carModel3d.add(body);
+    carModel3d.add(cabin);
+    carModel3d.add(windshield);
+
+    wheelPositions.forEach(function(pos) {
+        var wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(pos[0], pos[1], pos[2]);
+        carModel3d.add(wheel);
+    });
+
+    scene3d.add(carModel3d);
+
+    // Grid
+    var grid = new THREE.GridHelper(5, 10, 0x1e2a4a, 0x111827);
+    grid.position.y = -0.45;
+    scene3d.add(grid);
+
+    // Axis indicator (small)
+    var axesGroup = new THREE.Group();
+    var axMat = new THREE.LineBasicMaterial({ color: 0xef4444 });
+    var ayMat = new THREE.LineBasicMaterial({ color: 0x22c55e });
+    var azMat = new THREE.LineBasicMaterial({ color: 0x3b82f6 });
+    var axGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0.6,0,0)]);
+    var ayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0.6,0)]);
+    var azGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0.6)]);
+    axesGroup.add(new THREE.Line(axGeo, axMat));
+    axesGroup.add(new THREE.Line(ayGeo, ayMat));
+    axesGroup.add(new THREE.Line(azGeo, azMat));
+    axesGroup.position.set(-2, -0.4, -2);
+    scene3d.add(axesGroup);
+
+    animate3d();
+}
+
+function animate3d() {
+    if (!renderer3d || !scene3d || !camera3d) return;
+    requestAnimationFrame(animate3d);
+    renderer3d.render(scene3d, camera3d);
+}
+
+function updateSensor3D(ax, ay, az, gx, gy, gz) {
+    if (!carModel3d) return;
+
+    // Convert accelerometer to pitch/roll angles
+    var pitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
+    var roll = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
+
+    // Smooth interpolation to avoid jitter
+    var SMOOTH = 0.12;
+    carModel3d.rotation.x += (pitch - carModel3d.rotation.x) * SMOOTH;
+    carModel3d.rotation.z += (roll - carModel3d.rotation.z) * SMOOTH;
+
+    // Yaw from gyroscope Z (integrated, with decay to prevent drift)
+    carModel3d.rotation.y += (gz * 0.00008);
+    carModel3d.rotation.y *= 0.995; // slow decay to center
+}
+</script>
 <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/historical.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
