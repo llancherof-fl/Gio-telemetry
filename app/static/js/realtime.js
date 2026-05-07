@@ -930,18 +930,27 @@ function renderRealtimePanels(data, lat, lon) {
 
         sensorPanel.innerHTML =
             '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Señal</div><div class="val">' + getSensorFreshnessLabel() + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Sensor source</div><div class="val">' + (latestSensor && latestSensor.sensor_source ? latestSensor.sensor_source : '—') + '</div></div>' +
-            '</div>' +
-            '<div class="live-grid">' +
                 '<div class="live-field"><div class="lbl">AX / AY / AZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.ax) + ' / ' + formatSensorValue(latestSensor && latestSensor.ay) + ' / ' + formatSensorValue(latestSensor && latestSensor.az) + '</div></div>' +
                 '<div class="live-field"><div class="lbl">GX / GY / GZ</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.gx) + ' / ' + formatSensorValue(latestSensor && latestSensor.gy) + ' / ' + formatSensorValue(latestSensor && latestSensor.gz) + '</div></div>' +
             '</div>' +
             '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Aceleración total</div><div class="val">' + formatSensorValue(latestSensor && latestSensor.acc_mag) + '</div></div>' +
                 '<div class="live-field"><div class="lbl">Eventos</div><div class="val">' + tags + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Source</div><div class="val">' + (latestSensor && latestSensor.sensor_source ? latestSensor.sensor_source : '—') + '</div></div>' +
             '</div>' +
-            '<div class="live-field"><div class="lbl">Timestamp sensor</div><div class="val" style="font-size:0.74rem">' + (latestSensor && latestSensor.timestamp ? latestSensor.timestamp : '—') + '</div></div>';
+            '<div id="sensor-3d-wrap" style="width:100%;height:160px;margin-top:8px;border-radius:8px;overflow:hidden;background:#0a0e1a"></div>' +
+            '<div class="live-field" style="margin-top:6px"><div class="lbl">Timestamp sensor</div><div class="val" style="font-size:0.74rem">' + (latestSensor && latestSensor.timestamp ? latestSensor.timestamp : '—') + '</div></div>';
+
+        initSensor3D();
+        if (latestSensor) {
+            updateSensor3D(
+                parseFloat(latestSensor.ax) || 0,
+                parseFloat(latestSensor.ay) || 0,
+                parseFloat(latestSensor.az) || 0,
+                parseFloat(latestSensor.gx) || 0,
+                parseFloat(latestSensor.gy) || 0,
+                parseFloat(latestSensor.gz) || 0
+            );
+        }
     }
 
     if (routeInfo) {
