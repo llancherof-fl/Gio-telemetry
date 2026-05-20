@@ -390,11 +390,23 @@
 // ════════════════════════════════════════
 var scene3d = null, camera3d = null, renderer3d = null, carModel3d = null;
 var sensor3dInitialized = false;
+// ── Interpolation targets (updated by data, consumed by animate loop at 60fps) ──
+var sensor3dTargetPitch = 0, sensor3dTargetRoll = 0, sensor3dTargetYaw = 0;
 
 function initSensor3D() {
     var container = document.getElementById('sensor-3d-wrap');
-    if (!container || sensor3dInitialized) return;
+    if (!container) return;
     if (container.offsetWidth < 10) return;
+
+    // If already initialized, just re-attach the existing canvas to the new DOM container
+    if (sensor3dInitialized && renderer3d && renderer3d.domElement) {
+        if (renderer3d.domElement.parentNode !== container) {
+            container.innerHTML = '';
+            container.appendChild(renderer3d.domElement);
+            renderer3d.setSize(container.offsetWidth, 160);
+        }
+        return;
+    }
 
     sensor3dInitialized = true;
 
@@ -482,24 +494,28 @@ function initSensor3D() {
 function animate3d() {
     if (!renderer3d || !scene3d || !camera3d) return;
     requestAnimationFrame(animate3d);
+
+    // Smooth interpolation runs every frame (~60fps) for fluid motion
+    if (carModel3d) {
+        var LERP = 0.08; // per-frame factor — at 60fps this converges in ~0.5s
+        carModel3d.rotation.x += (sensor3dTargetPitch - carModel3d.rotation.x) * LERP;
+        carModel3d.rotation.z += (sensor3dTargetRoll  - carModel3d.rotation.z) * LERP;
+        carModel3d.rotation.y += (sensor3dTargetYaw   - carModel3d.rotation.y) * LERP;
+    }
+
     renderer3d.render(scene3d, camera3d);
 }
 
 function updateSensor3D(ax, ay, az, gx, gy, gz) {
     if (!carModel3d) return;
 
-    // Convert accelerometer to pitch/roll angles
-    var pitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
-    var roll = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
+    // Set target angles — animate3d() will interpolate toward these at 60fps
+    sensor3dTargetPitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
+    sensor3dTargetRoll  = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
 
-    // Smooth interpolation to avoid jitter
-    var SMOOTH = 0.12;
-    carModel3d.rotation.x += (pitch - carModel3d.rotation.x) * SMOOTH;
-    carModel3d.rotation.z += (roll - carModel3d.rotation.z) * SMOOTH;
-
-    // Yaw from gyroscope Z (integrated, with decay to prevent drift)
-    carModel3d.rotation.y += (gz * 0.00008);
-    carModel3d.rotation.y *= 0.995; // slow decay to center
+    // Integrate gyroscope Z for yaw (with decay toward center to prevent drift)
+    sensor3dTargetYaw += gz * 0.002;
+    sensor3dTargetYaw *= 0.98;
 }
 </script>
 <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
