@@ -97,7 +97,7 @@ function switchHistoricalMobilePane(pane) {
         setTimeout(function() {
             mapHist.invalidateSize();
             if (typeof refreshHistoricLayout === 'function') {
-                refreshHistoricLayout(true);
+                refreshHistoricLayout({ preserveView: true, refit: false, skipAnimation: true });
             }
         }, 160);
     }
@@ -167,7 +167,7 @@ function switchView(view, skipPersist) {
         if (view === 'historical' && mapHist) {
             mapHist.invalidateSize();
             if (typeof refreshHistoricLayout === 'function') {
-                refreshHistoricLayout(true);
+                refreshHistoricLayout({ preserveView: true, refit: false, skipAnimation: true });
             }
         }
     }, 90);
@@ -204,7 +204,7 @@ function toggleHistoricalPanel() {
         setTimeout(function() {
             mapHist.invalidateSize();
             if (typeof refreshHistoricLayout === 'function') {
-                refreshHistoricLayout(true);
+                refreshHistoricLayout({ preserveView: true, refit: false, skipAnimation: true });
             }
         }, 260);
     }
@@ -322,9 +322,8 @@ function toggleDevMode() {
             if (!mapHist) return;
             mapHist.invalidateSize();
             if (typeof refreshHistoricLayout === 'function') {
-                refreshHistoricLayout(true);
+                refreshHistoricLayout({ preserveView: true, refit: false, skipAnimation: true });
             }
         });
     }
 })();
-
