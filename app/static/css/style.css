@@ -1649,12 +1649,7 @@ input:disabled {
 }
 
 body:not(.dev-mode) .dev-only {
-    opacity: 0;
-    max-height: 0;
-    overflow: hidden;
-    padding: 0 !important;
-    margin: 0 !important;
-    border: none !important;
+    display: none !important;
 }
 
 /* ══════════════════════════════════════════
@@ -1795,3 +1790,31 @@ body:not(.dev-mode) .dev-only {
     transform: scale(1.1);
 }
 
+
+/* Collapsable cards */
+.card-body {
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 1000px;
+    opacity: 1;
+    overflow: hidden;
+}
+
+.card.collapsed .card-body {
+    max-height: 0;
+    opacity: 0;
+}
+
+.card.collapsed .chevron {
+    transform: rotate(90deg) !important;
+}
+
+.card-header:hover {
+    background: rgba(36, 56, 100, 0.6);
+}
+
+#sensor-3d-wrap {
+    min-height: 160px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

@@ -955,18 +955,21 @@ function renderRealtimePanels(data, lat, lon) {
     }
 
     if (livePanel) {
+        var cleanTs = data.timestamp ? data.timestamp.split('.')[0] : '—';
         livePanel.innerHTML =
             '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Timestamp</div><div class="val" style="font-size:0.74rem">' + data.timestamp + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Dispositivo</div><div class="val" style="font-size:0.78rem">' + data.device + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Timestamp</div><div class="val" style="font-size:0.8rem; font-weight:600;">' + cleanTs + '</div></div>' +
+                '<div class="live-field"><div class="lbl">Dispositivo</div><div class="val" style="font-size:0.8rem; font-weight:600; color:var(--blue-light);">' + data.device + '</div></div>' +
             '</div>' +
-            '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Latitud</div><div class="val">' + lat.toFixed(6) + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Longitud</div><div class="val">' + lon.toFixed(6) + '</div></div>' +
-            '</div>' +
-            '<div class="live-grid">' +
-                '<div class="live-field"><div class="lbl">Trip ID</div><div class="val" style="font-size:0.75rem">' + getTripShortId(rtTripMeta.tripId) + '</div></div>' +
-                '<div class="live-field"><div class="lbl">Estado</div><div class="val">' + tripStatusLabel + '</div></div>' +
+            '<div class="dev-only">' +
+                '<div class="live-grid" style="margin-top:8px;">' +
+                    '<div class="live-field"><div class="lbl">Latitud</div><div class="val">' + lat.toFixed(6) + '</div></div>' +
+                    '<div class="live-field"><div class="lbl">Longitud</div><div class="val">' + lon.toFixed(6) + '</div></div>' +
+                '</div>' +
+                '<div class="live-grid" style="margin-top:8px;">' +
+                    '<div class="live-field"><div class="lbl">Trip ID</div><div class="val" style="font-size:0.75rem">' + getTripShortId(rtTripMeta.tripId) + '</div></div>' +
+                    '<div class="live-field"><div class="lbl">Estado</div><div class="val">' + tripStatusLabel + '</div></div>' +
+                '</div>' +
             '</div>';
     }
 

@@ -43,8 +43,8 @@
 </nav>
 
 <div class="view active" id="view-realtime">
-    <div class="view-toolbar">
-        <div class="toolbar-group">
+    <div class="view-toolbar" style="flex-wrap: wrap; gap: 8px;">
+        <div class="toolbar-group" style="flex: 1; min-width: 200px;">
             <span class="status-pill dev-only">
                 <span class="status-dot" id="rt-status-dot"></span>
                 <span id="rt-connection-label">Conectando señal GPS...</span>
@@ -52,13 +52,13 @@
             <span class="toolbar-note dev-only" id="rt-follow-note">Seguimiento automático activo</span>
         </div>
         <div class="toolbar-group">
-            <select id="rt-route-method" class="dev-only" title="Método de ajuste de ruta">
-                <option value="route">Route (rápido)</option>
-                <option value="match">Match (más fiel)</option>
+            <select id="rt-route-method" class="dev-only" title="Método de ajuste de ruta" style="padding: 4px; font-size: 0.75rem;">
+                <option value="route">Route</option>
+                <option value="match">Match</option>
             </select>
-            <button class="btn btn-outline" id="btn-follow-toggle" onclick="toggleAutoFollow()">Seguimiento: ON</button>
-            <button class="btn btn-outline" id="btn-recenter" onclick="recenterVehicle()" disabled>Recentrar</button>
-            <button class="btn btn-outline" id="btn-toggle-rt-details" onclick="toggleRealtimeDetails()">Ocultar detalles</button>
+            <button class="btn btn-outline btn-sm" id="btn-follow-toggle" onclick="toggleAutoFollow()" style="font-size: 0.75rem; padding: 4px 8px;">Seguimiento: ON</button>
+            <button class="btn btn-outline btn-sm" id="btn-recenter" onclick="recenterVehicle()" disabled style="font-size: 0.75rem; padding: 4px 8px;">Recentrar</button>
+            <button class="btn btn-outline btn-sm" id="btn-toggle-rt-details" onclick="toggleRealtimeDetails()" style="font-size: 0.75rem; padding: 4px 8px;">Ocultar detalles</button>
         </div>
     </div>
 
@@ -90,10 +90,11 @@
             </div>
             <div class="results-list" style="display: flex; flex-direction: column; gap: 12px; padding: 12px;">
                 <div class="card" style="display:flex;flex-direction:column;">
-                <div class="card-header">
-                    <span class="badge badge-blue">LIVE</span>
-                    Última posición
+                <div class="card-header" onclick="toggleCard(this)" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                    <div><span class="badge badge-blue">LIVE</span> Última posición</div>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
+                <div class="card-body">
                 <div class="live-panel" id="live-panel">
                     <div class="no-data">
                         <div class="no-data-icon">
@@ -102,13 +103,15 @@
                         Cargando última posición...
                     </div>
                 </div>
+                </div>
             </div>
 
-            <div class="card" style="display:flex;flex-direction:column;">
-                <div class="card-header">
-                    <span class="badge badge-orange">RUTA</span>
-                    Recorrido de la sesión
+            <div class="card dev-only" style="display:flex;flex-direction:column;">
+                <div class="card-header" onclick="toggleCard(this)" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                    <div><span class="badge badge-orange">RUTA</span> Recorrido de la sesión</div>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
+                <div class="card-body">
                 <div class="live-panel" id="route-info">
                     <div class="no-data">
                         <div class="no-data-icon">
@@ -117,13 +120,15 @@
                         La polilínea se construye durante esta sesión
                     </div>
                 </div>
+                </div>
             </div>
 
             <div class="card" style="display:flex;flex-direction:column;">
-                <div class="card-header">
-                    <span class="badge badge-blue">SENSOR</span>
-                    Telemetría MPU6050
+                <div class="card-header" onclick="toggleCard(this)" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                    <div><span class="badge badge-blue">SENSOR</span> Telemetría MPU6050</div>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
+                <div class="card-body">
                 <div class="live-panel" id="sensor-panel">
                     <div class="no-data">
                         <div class="no-data-icon">
@@ -131,6 +136,7 @@
                         </div>
                         Esperando datos de acelerómetro
                     </div>
+                </div>
                 </div>
             </div>
         </div>
