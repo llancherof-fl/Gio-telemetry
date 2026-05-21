@@ -45,7 +45,7 @@
 <div class="view active" id="view-realtime">
     <div class="view-toolbar">
         <div class="toolbar-group">
-            <span class="status-pill">
+            <span class="status-pill dev-only">
                 <span class="status-dot" id="rt-status-dot"></span>
                 <span id="rt-connection-label">Conectando señal GPS...</span>
             </span>
@@ -181,8 +181,8 @@
                     <span class="control-label">Detalle (paso)</span>
                     <div class="control-inline">
                         <select id="sample-select" title="Reducir ruido de puntos">
-                            <option value="1">Detalle alto (1 min)</option>
-                            <option value="3" selected>Paso recomendado (3 min)</option>
+                            <option value="1" selected>Detalle alto (1 min)</option>
+                            <option value="3">Paso recomendado (3 min)</option>
                             <option value="5">Paso ligero (5 min)</option>
                             <option value="custom">Paso personalizado</option>
                         </select>
