@@ -1763,3 +1763,91 @@ body:not(.dev-mode) .dev-only {
     transform: scale(1.1);
 }
 
+
+/* =========================================================
+   SLIDER HISTÓRICO MEJORADO
+========================================================= */
+
+#hist-seq-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    outline: none;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    margin-top: 6px;
+}
+
+#hist-seq-slider:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+#hist-seq-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #4dabf7;
+    border: 3px solid #ffffff;
+    box-shadow: 0 0 10px rgba(77,171,247,0.55);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+#hist-seq-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.12);
+}
+
+#hist-seq-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #4dabf7;
+    border: 3px solid #ffffff;
+    box-shadow: 0 0 10px rgba(77,171,247,0.55);
+    cursor: pointer;
+}
+
+/* =========================================================
+   LEYENDA EVENTOS SENSOR
+========================================================= */
+
+.sensor-events-legend {
+    display: flex;
+    gap: 12px;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    color: #8da0c2;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.sensor-events-legend span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sensor-events-legend .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.sensor-events-legend .brake {
+    background: #ef4444;
+}
+
+.sensor-events-legend .turn {
+    background: #f59e0b;
+}
+
+.sensor-events-legend .normal {
+    background: #22c55e;
+}
+
