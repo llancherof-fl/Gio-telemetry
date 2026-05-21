@@ -405,6 +405,8 @@ body {
     gap: 12px;
     align-items: stretch;
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    height: min(76vh, calc(100dvh - var(--layout-offset-desktop)));
+    max-height: calc(100dvh - var(--layout-offset-desktop));
 }
 
 .rt-map-card {
@@ -753,6 +755,7 @@ body {
 .result-info {
     flex: 1;
     min-width: 0;
+    word-break: break-word;
 }
 
 .result-coords {
@@ -787,6 +790,7 @@ body {
 
 .result-item-trip {
     align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .trip-status {
@@ -1140,6 +1144,10 @@ input:disabled {
 }
 
 @media (max-width: 960px) {
+    #btn-toggle-rt-details,
+    #btn-toggle-hist-panel {
+        display: none;
+    }
     .top-nav {
         padding: 0 12px;
     }
@@ -1191,6 +1199,8 @@ input:disabled {
         grid-template-columns: 1fr;
     }
 
+    .rt-grid,
+    .rt-grid.panel-collapsed,
     .hist-layout,
     .hist-layout.panel-collapsed {
         height: auto;
@@ -1562,6 +1572,10 @@ input:disabled {
 }
 
 @media (max-width: 960px) {
+    #btn-toggle-rt-details,
+    #btn-toggle-hist-panel {
+        display: none;
+    }
 
     /* Show compact strip on mobile */
     .mobile-filter-bar {
