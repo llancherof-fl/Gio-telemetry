@@ -408,12 +408,14 @@ body {
 
 .rt-map-card {
     min-height: 70vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .map-wrap {
     position: relative;
     width: 100%;
-    height: calc(100% - 43px);
+    flex: 1;
     min-height: 420px;
 }
 
