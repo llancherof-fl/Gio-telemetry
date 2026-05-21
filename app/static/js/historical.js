@@ -798,6 +798,7 @@ function renderSensorEvents(trip, events) {
     if (!histShowEventMarkers && withCoords > 0 && histEventAutoScopeKey !== scopeKey) {
         histShowEventMarkers = true;
         histEventAutoScopeKey = scopeKey;
+        drawSensorEventMarkers();
     }
     toggleBtn.textContent = histShowEventMarkers ? 'Ocultar en mapa' : 'Mostrar en mapa';
 
