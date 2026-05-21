@@ -126,8 +126,9 @@ function applyUIPreferences() {
     var realtimeView = document.getElementById('view-realtime');
     var histLayout = document.getElementById('hist-layout');
 
-    if (realtimeView) {
-        realtimeView.classList.toggle('details-collapsed', !uiPrefs.realtimeDetailsOpen);
+    var rtGrid = document.getElementById('rt-grid');
+    if (rtGrid) {
+        rtGrid.classList.toggle('panel-collapsed', !uiPrefs.realtimeDetailsOpen);
     }
 
     if (histLayout) {
@@ -179,7 +180,9 @@ function toggleRealtimeDetails() {
     saveUIPreferences();
 
     if (mapRT) {
-        setTimeout(function() { mapRT.invalidateSize(); }, 120);
+        setTimeout(function() {
+            mapRT.invalidateSize();
+        }, 320); // match transition duration
     }
 }
 
@@ -206,7 +209,7 @@ function toggleHistoricalPanel() {
             if (typeof refreshHistoricLayout === 'function') {
                 refreshHistoricLayout({ preserveView: true, refit: false, skipAnimation: true });
             }
-        }, 260);
+        }, 320); // match transition duration
     }
 }
 

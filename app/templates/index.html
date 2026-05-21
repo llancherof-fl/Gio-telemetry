@@ -49,10 +49,10 @@
                 <span class="status-dot" id="rt-status-dot"></span>
                 <span id="rt-connection-label">Conectando señal GPS...</span>
             </span>
-            <span class="toolbar-note" id="rt-follow-note">Seguimiento automático activo</span>
+            <span class="toolbar-note dev-only" id="rt-follow-note">Seguimiento automático activo</span>
         </div>
         <div class="toolbar-group">
-            <select id="rt-route-method" title="Método de ajuste de ruta">
+            <select id="rt-route-method" class="dev-only" title="Método de ajuste de ruta">
                 <option value="route">Route (rápido)</option>
                 <option value="match">Match (más fiel)</option>
             </select>
@@ -79,8 +79,17 @@
             </div>
         </div>
 
-        <div class="rt-detail-cards" id="rt-detail-cards">
-            <div class="card" style="display:flex;flex-direction:column;">
+        <div class="results-panel" id="rt-detail-cards">
+            <div class="results-header">
+                <span class="results-title">Panel de Control</span>
+                <div class="results-actions">
+                    <button class="icon-btn" onclick="toggleRealtimeDetails()" aria-label="Colapsar panel">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="results-list" style="display: flex; flex-direction: column; gap: 12px; padding: 12px;">
+                <div class="card" style="display:flex;flex-direction:column;">
                 <div class="card-header">
                     <span class="badge badge-blue">LIVE</span>
                     Última posición
@@ -110,7 +119,7 @@
                 </div>
             </div>
 
-            <div class="card" style="display:flex;flex-direction:column;">
+            <div class="card dev-only" style="display:flex;flex-direction:column;">
                 <div class="card-header">
                     <span class="badge badge-blue">SENSOR</span>
                     Telemetría MPU6050
@@ -266,7 +275,7 @@
                     Selecciona un rango y presiona Buscar
                 </div>
             </div>
-            <div class="sensor-events-panel" id="sensor-events-panel">
+            <div class="sensor-events-panel dev-only" id="sensor-events-panel">
                 <div class="sensor-events-header">
                     <span class="results-title">Eventos sensor</span>
                     <button class="btn btn-outline btn-sm" id="btn-toggle-event-markers" onclick="toggleSensorEventMarkers()" disabled>Mostrar en mapa</button>
