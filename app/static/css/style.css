@@ -408,12 +408,14 @@ body {
 
 .rt-map-card {
     min-height: 70vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .map-wrap {
     position: relative;
     width: 100%;
-    height: calc(100% - 43px);
+    flex: 1;
     min-height: 420px;
 }
 
@@ -1409,8 +1411,42 @@ input:disabled {
 }
 
 #hist-seq-slider {
-    width: 150px;
-    accent-color: #5bb9ff;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border);
+    outline: none;
+    flex: 1;
+    min-width: 120px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+#hist-seq-slider:hover {
+    background: var(--border-hover);
+}
+#hist-seq-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--blue-bright, #4dabf7);
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 0 8px rgba(77,171,247,0.4);
+    transition: transform 0.15s;
+}
+#hist-seq-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+#hist-seq-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--blue-bright, #4dabf7);
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 0 8px rgba(77,171,247,0.4);
 }
 
 .hist-seq-label {
@@ -1419,6 +1455,14 @@ input:disabled {
     font-size: 0.68rem;
     font-family: 'Roboto Mono', monospace;
     text-align: right;
+}
+
+.hist-seq-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
 }
 
 .hist-seq-controls .btn.btn-sm {

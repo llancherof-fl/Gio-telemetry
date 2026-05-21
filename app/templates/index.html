@@ -36,7 +36,7 @@
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
-            <span id="dev-toggle-text">Dev</span>
+            <span id="dev-toggle-text">Avanzado</span>
         </button>
         <div class="nav-meta">{{ ec2_name }}</div>
     </div>
@@ -82,6 +82,21 @@
         <div class="rt-detail-cards" id="rt-detail-cards">
             <div class="card" style="display:flex;flex-direction:column;">
                 <div class="card-header">
+                    <span class="badge badge-blue">SENSOR</span>
+                    Telemetría MPU6050
+                </div>
+                <div class="live-panel" id="sensor-panel">
+                    <div class="no-data">
+                        <div class="no-data-icon">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                        </div>
+                        Esperando datos de acelerómetro
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="display:flex;flex-direction:column;">
+                <div class="card-header">
                     <span class="badge badge-blue">LIVE</span>
                     Última posición
                 </div>
@@ -106,21 +121,6 @@
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><path d="M3 22L8.5 2"/><path d="M15.5 2L21 22"/><line x1="12" y1="5" x2="12" y2="8"/><line x1="12" y1="11" x2="12" y2="14"/><line x1="12" y1="17" x2="12" y2="20"/></svg>
                         </div>
                         La polilínea se construye durante esta sesión
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" style="display:flex;flex-direction:column;">
-                <div class="card-header">
-                    <span class="badge badge-blue">SENSOR</span>
-                    Telemetría MPU6050
-                </div>
-                <div class="live-panel" id="sensor-panel">
-                    <div class="no-data">
-                        <div class="no-data-icon">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-                        </div>
-                        Esperando datos de acelerómetro
                     </div>
                 </div>
             </div>
@@ -272,6 +272,11 @@
                     <button class="btn btn-outline btn-sm" id="btn-toggle-event-markers" onclick="toggleSensorEventMarkers()" disabled>Mostrar en mapa</button>
                 </div>
                 <div class="sensor-events-summary" id="sensor-events-summary">Sin trayecto seleccionado.</div>
+                <div style="display:flex;gap:10px;padding:6px 12px;font-size:0.7rem;color:var(--text-secondary,#8da0c2);flex-wrap:wrap">
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:3px"></span>Frenada</span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:3px"></span>Giro</span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:3px"></span>Normal</span>
+                </div>
                 <div class="sensor-events-list" id="sensor-events-list"></div>
             </div>
         </div>
@@ -560,9 +565,9 @@ function animate3d() {
 function updateSensor3D(ax, ay, az, gx, gy, gz) {
     if (!carModel3d) return;
 
-    // Convert accelerometer to pitch/roll angles
-    var pitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
-    var roll = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
+    // Set target angles — animate3d() will interpolate toward these at 60fps
+    sensor3dTargetPitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
+    sensor3dTargetRoll  = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
 
     // Smooth interpolation to avoid jitter
     var SMOOTH = 0.4;
