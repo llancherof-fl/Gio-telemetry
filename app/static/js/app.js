@@ -330,3 +330,11 @@ function toggleDevMode() {
         });
     }
 })();
+
+
+function toggleCard(headerEl) {
+    var card = headerEl.closest('.card');
+    if(card) {
+        card.classList.toggle('collapsed');
+    }
+}
