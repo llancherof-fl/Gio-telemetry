@@ -276,7 +276,7 @@ function toggleDevMode() {
     } catch (e) {
         // ignore storage limits
     }
-    showToast(isNowDev ? 'Modo técnico activado' : 'Modo técnico desactivado');
+    showToast(isNowDev ? 'Herramientas avanzadas activadas' : 'Herramientas avanzadas desactivadas');
 }
 
 /**
